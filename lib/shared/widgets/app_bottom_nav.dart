@@ -1,0 +1,128 @@
+import "dart:ui";
+
+import "package:flow/app/radius.dart";
+import "package:flutter/cupertino.dart";
+import "package:flutter/foundation.dart";
+import "package:flutter/material.dart";
+
+class AppBottomNav extends StatelessWidget {
+  const AppBottomNav({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final navSurface = theme.scaffoldBackgroundColor;
+    final topAlpha = theme.brightness == Brightness.dark ? 0.30 : 0.42;
+    final bottomAlpha = theme.brightness == Brightness.dark ? 0.92 : 0.94;
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: DecoratedBox(
+          key: const ValueKey("app_bottom_nav_bar"),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                navSurface.withValues(alpha: topAlpha),
+                navSurface.withValues(alpha: bottomAlpha),
+              ],
+            ),
+            border: Border(
+              top: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.32),
+                width: 0.5,
+              ),
+            ),
+          ),
+          child: const SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 60,
+              child: Row(
+                children: [
+                  _BottomNavItem(
+                    label: "Following",
+                    icon: CupertinoIcons.heart,
+                    activeIcon: CupertinoIcons.heart_fill,
+                    isActive: true,
+                  ),
+                  _BottomNavItem(
+                    label: "Browse",
+                    icon: CupertinoIcons.compass,
+                    activeIcon: CupertinoIcons.compass_fill,
+                  ),
+                  _BottomNavItem(
+                    label: "Settings",
+                    icon: CupertinoIcons.gear,
+                    activeIcon: CupertinoIcons.gear_solid,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomNavItem extends StatelessWidget {
+  const _BottomNavItem({
+    required this.label,
+    required this.icon,
+    required this.activeIcon,
+    this.isActive = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final IconData activeIcon;
+  final bool isActive;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54);
+
+    return Expanded(
+      child: Semantics(
+        selected: isActive,
+        button: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          onTap: () {},
+          child: Column(
+            key: ValueKey("bottom_nav_item_$label"),
+            children: [
+              const SizedBox(height: 12),
+              Icon(isActive ? activeIcon : icon, color: color, size: 25),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty("label", label));
+    properties.add(DiagnosticsProperty<IconData>("icon", icon));
+    properties.add(DiagnosticsProperty<IconData>("activeIcon", activeIcon));
+    properties.add(DiagnosticsProperty<bool>("isActive", isActive));
+  }
+}
