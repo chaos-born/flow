@@ -25,6 +25,7 @@ class BrowseScreenStateStore {
   String? _liveChannelsCursor;
   double _categoriesScrollOffset = 0;
   double _liveChannelsScrollOffset = 0;
+  List<String> _searchHistory = const <String>[];
 
   double _scrollOffsetFor(_BrowseSection section) => switch (section) {
     _BrowseSection.categories => _categoriesScrollOffset,
@@ -265,28 +266,6 @@ class _BrowseScreenState extends State<BrowseScreen> {
     }
   }
 
-  Future<_BrowseCategory> _browseCategoryFromApi(
-    TwitchApiClient apiClient,
-    TwitchCategory category,
-  ) async {
-    final streams = await apiClient.fetchLiveStreamsPage(
-      first: 100,
-      gameIds: [category.id],
-    );
-    final viewerCount = streams.data.fold<int>(
-      0,
-      (total, stream) => total + stream.viewerCount,
-    );
-
-    return _BrowseCategory(
-      id: category.id,
-      name: category.name,
-      viewers: _formatCompactCount(viewerCount),
-      imageUrl: _twitchBoxArtUrl(category.boxArtUrl),
-      colors: _colorsForText(category.id),
-    );
-  }
-
   void _loadMoreWhenNearBottom() {
     _persistScrollOffset();
     if (!_scrollController.hasClients || _scrollController.position.extentAfter > 420) {
@@ -307,11 +286,27 @@ class _BrowseScreenState extends State<BrowseScreen> {
     return _loadLiveChannels(reset: true);
   }
 
+  void _openCategory(_BrowseCategory category) {
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => _CategoryStreamsScreen(
+            authController: _authController,
+            category: category,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openSearch() {
     unawaited(
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => BrowseSearchScreen(authController: _authController),
+          builder: (_) => BrowseSearchScreen(
+            authController: _authController,
+            stateStore: _stateStore,
+          ),
         ),
       ),
     );
@@ -361,7 +356,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
                   if (_activeError != null)
                     _StatusMessage(message: _activeError!)
                   else if (_selectedSection == _BrowseSection.categories)
-                    _CategoryGrid(categories: _categories)
+                    _CategoryGrid(
+                      categories: _categories,
+                      onCategorySelected: _openCategory,
+                    )
                   else
                     _LiveChannelsList(channels: _liveChannels),
                   if (_activeLoading && !_activeItemsEmpty) ...[
@@ -405,10 +403,12 @@ enum _BrowseSection { categories, liveChannels }
 class BrowseSearchScreen extends StatefulWidget {
   const BrowseSearchScreen({
     required this.authController,
+    this.stateStore,
     super.key,
   });
 
   final TwitchAuthController authController;
+  final BrowseScreenStateStore? stateStore;
 
   @override
   State<BrowseSearchScreen> createState() => _BrowseSearchScreenState();
@@ -417,6 +417,7 @@ class BrowseSearchScreen extends StatefulWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<TwitchAuthController>("authController", authController));
+    properties.add(DiagnosticsProperty<BrowseScreenStateStore?>("stateStore", stateStore));
   }
 }
 
@@ -424,13 +425,18 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   Timer? _debounceTimer;
+  late final BrowseScreenStateStore _stateStore;
   List<TwitchSearchChannel> _channels = const <TwitchSearchChannel>[];
+  List<_BrowseCategory> _categories = const <_BrowseCategory>[];
+  List<String> _searchHistory = const <String>[];
   bool _isSearching = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _stateStore = widget.stateStore ?? BrowseScreenStateStore();
+    _searchHistory = _stateStore._searchHistory;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _focusNode.requestFocus();
@@ -452,6 +458,7 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
     if (trimmedQuery.isEmpty) {
       setState(() {
         _channels = const <TwitchSearchChannel>[];
+        _categories = const <_BrowseCategory>[];
         _isSearching = false;
         _errorMessage = null;
       });
@@ -470,13 +477,14 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
   Future<void> _searchChannels(String query) async {
     try {
       final apiClient = await _loadBrowseApiClient(widget.authController);
-      final page = await apiClient.searchChannelsPage(query, first: 8);
+      final channelPage = await apiClient.searchChannelsPage(query, first: 8);
+      final categoryPage = await apiClient.searchCategoriesPage(query, first: 8);
       final validUsersById = await apiClient.fetchUsersByIds([
-        for (final channel in page.data) channel.id,
+        for (final channel in channelPage.data) channel.id,
       ]);
       final channels =
           [
-            for (final channel in page.data)
+            for (final channel in channelPage.data)
               if (validUsersById.containsKey(channel.id)) channel,
           ]..sort((left, right) {
             if (left.isLive == right.isLive) {
@@ -486,12 +494,18 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
             }
             return left.isLive ? -1 : 1;
           });
+      final categories = await Future.wait([
+        for (final category in categoryPage.data) _browseCategoryFromApi(apiClient, category),
+      ]);
 
       if (!mounted || _searchController.text.trim() != query) {
         return;
       }
       setState(() {
         _channels = channels;
+        _categories = categories;
+        _searchHistory = _updatedSearchHistory(query);
+        _stateStore._searchHistory = _searchHistory;
         _isSearching = false;
       });
     } on Object catch (error) {
@@ -503,6 +517,38 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
         _isSearching = false;
       });
     }
+  }
+
+  List<String> _updatedSearchHistory(String query) {
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.isEmpty) {
+      return _searchHistory;
+    }
+
+    return [
+      normalizedQuery,
+      for (final item in _searchHistory)
+        if (item.toLowerCase() != normalizedQuery.toLowerCase()) item,
+    ].take(8).toList();
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _handleQueryChanged("");
+  }
+
+  void _clearSearchHistory() {
+    setState(() {
+      _searchHistory = const <String>[];
+      _stateStore._searchHistory = _searchHistory;
+    });
+  }
+
+  void _searchFromHistory(String query) {
+    _searchController
+      ..text = query
+      ..selection = TextSelection.collapsed(offset: query.length);
+    _handleQueryChanged(query);
   }
 
   @override
@@ -521,18 +567,38 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
               controller: _searchController,
               focusNode: _focusNode,
               onChanged: _handleQueryChanged,
+              onClear: _clearSearch,
             ),
             if (_isSearching) const LinearProgressIndicator(minHeight: 3),
             Expanded(
               child: query.isEmpty
-                  ? const _StatusMessage(message: "Search channels")
-                  : _SearchChannelResults(
+                  ? _SearchHistoryView(
+                      history: _searchHistory,
+                      onHistorySelected: _searchFromHistory,
+                      onClearHistory: _clearSearchHistory,
+                    )
+                  : _SearchResults(
                       channels: _channels,
+                      categories: _categories,
                       errorMessage: _errorMessage,
                       isSearching: _isSearching,
+                      onCategorySelected: _openCategory,
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _openCategory(_BrowseCategory category) {
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => _CategoryStreamsScreen(
+            authController: widget.authController,
+            category: category,
+          ),
         ),
       ),
     );
@@ -544,11 +610,13 @@ class _SearchPageTopBar extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.onChanged,
+    required this.onClear,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -575,16 +643,14 @@ class _SearchPageTopBar extends StatelessWidget {
             textInputAction: TextInputAction.search,
             onChanged: onChanged,
             decoration: InputDecoration(
-              hintText: "Search channels",
+              hintText: "Search channels or categories",
               prefixIcon: const Icon(Icons.search),
               suffixIcon: controller.text.isEmpty
                   ? null
                   : IconButton(
-                      tooltip: "Clear",
-                      onPressed: () {
-                        controller.clear();
-                        onChanged("");
-                      },
+                      key: const ValueKey("browse_search_clear_button"),
+                      tooltip: "Clear search",
+                      onPressed: onClear,
                       icon: const Icon(Icons.close),
                     ),
             ),
@@ -600,19 +666,126 @@ class _SearchPageTopBar extends StatelessWidget {
     properties.add(DiagnosticsProperty<TextEditingController>("controller", controller));
     properties.add(DiagnosticsProperty<FocusNode>("focusNode", focusNode));
     properties.add(ObjectFlagProperty<ValueChanged<String>>.has("onChanged", onChanged));
+    properties.add(ObjectFlagProperty<VoidCallback>.has("onClear", onClear));
   }
 }
 
-class _SearchChannelResults extends StatelessWidget {
-  const _SearchChannelResults({
+class _SearchHistoryView extends StatelessWidget {
+  const _SearchHistoryView({
+    required this.history,
+    required this.onHistorySelected,
+    required this.onClearHistory,
+  });
+
+  final List<String> history;
+  final ValueChanged<String> onHistorySelected;
+  final VoidCallback onClearHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (history.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.history,
+              key: const ValueKey("browse_search_empty_history_icon"),
+              size: 42,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              "No recent searches",
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.58),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView(
+      padding: EdgeInsets.only(
+        left: AppSpacing.lg,
+        right: AppSpacing.lg,
+        bottom: 96 + MediaQuery.of(context).padding.bottom,
+      ),
+      children: [
+        Padding(
+          key: const ValueKey("browse_search_history_header"),
+          padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.xs),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  "History",
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+              TextButton(
+                key: const ValueKey("browse_search_clear_history_button"),
+                onPressed: onClearHistory,
+                child: const Text("Clear"),
+              ),
+            ],
+          ),
+        ),
+        for (final item in history)
+          ListTile(
+            key: ValueKey("browse_search_history_$item"),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.history),
+            title: Text(
+              item,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            onTap: () => onHistorySelected(item),
+          ),
+      ],
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(IterableProperty<String>("history", history));
+    properties.add(
+      ObjectFlagProperty<ValueChanged<String>>.has(
+        "onHistorySelected",
+        onHistorySelected,
+      ),
+    );
+    properties.add(ObjectFlagProperty<VoidCallback>.has("onClearHistory", onClearHistory));
+  }
+}
+
+class _SearchResults extends StatelessWidget {
+  const _SearchResults({
     required this.channels,
+    required this.categories,
     required this.errorMessage,
     required this.isSearching,
+    required this.onCategorySelected,
   });
 
   final List<TwitchSearchChannel> channels;
+  final List<_BrowseCategory> categories;
   final String? errorMessage;
   final bool isSearching;
+  final ValueChanged<_BrowseCategory> onCategorySelected;
 
   @override
   Widget build(BuildContext context) {
@@ -620,18 +793,39 @@ class _SearchChannelResults extends StatelessWidget {
     if (error != null) {
       return _StatusMessage(message: error);
     }
-    if (channels.isEmpty && !isSearching) {
+    if (channels.isEmpty && categories.isEmpty && !isSearching) {
       return const _StatusMessage(message: "No matching channels.");
     }
 
-    return ListView.builder(
+    final children = <Widget>[
+      if (channels.isNotEmpty) ...[
+        const _SearchSectionHeader(
+          key: ValueKey("browse_search_channels_header"),
+          title: "Channels",
+        ),
+        for (final channel in channels) _SearchChannelRow(channel: channel),
+      ],
+      if (categories.isNotEmpty) ...[
+        if (channels.isNotEmpty) const SizedBox(height: AppSpacing.md),
+        const _SearchSectionHeader(
+          key: ValueKey("browse_search_categories_header"),
+          title: "Categories",
+        ),
+        for (final category in categories)
+          _SearchCategoryRow(
+            category: category,
+            onTap: () => onCategorySelected(category),
+          ),
+      ],
+    ];
+
+    return ListView(
       padding: EdgeInsets.only(
         left: AppSpacing.lg,
         right: AppSpacing.lg,
         bottom: 96 + MediaQuery.of(context).padding.bottom,
       ),
-      itemCount: channels.length,
-      itemBuilder: (context, index) => _SearchChannelRow(channel: channels[index]),
+      children: children,
     );
   }
 
@@ -639,8 +833,49 @@ class _SearchChannelResults extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(IterableProperty<TwitchSearchChannel>("channels", channels));
+    properties.add(IterableProperty<_BrowseCategory>("categories", categories));
     properties.add(StringProperty("errorMessage", errorMessage));
     properties.add(DiagnosticsProperty<bool>("isSearching", isSearching));
+    properties.add(
+      ObjectFlagProperty<ValueChanged<_BrowseCategory>>.has(
+        "onCategorySelected",
+        onCategorySelected,
+      ),
+    );
+  }
+}
+
+class _SearchSectionHeader extends StatelessWidget {
+  const _SearchSectionHeader({
+    required this.title,
+    super.key,
+  });
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: AppSpacing.xs),
+      child: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.titleSmall?.copyWith(
+          color: theme.colorScheme.onSurface,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(StringProperty("title", title));
   }
 }
 
@@ -706,6 +941,333 @@ class _SearchChannelRow extends StatelessWidget {
   }
 }
 
+class _SearchCategoryRow extends StatelessWidget {
+  const _SearchCategoryRow({
+    required this.category,
+    required this.onTap,
+  });
+
+  final _BrowseCategory category;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final mutedColor = theme.colorScheme.onSurface.withValues(alpha: 0.58);
+    final borderRadius = BorderRadius.circular(AppRadius.sm);
+
+    return InkWell(
+      key: ValueKey("browse_search_category_${category.name}"),
+      borderRadius: borderRadius,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Row(
+          children: [
+            SizedBox(
+              key: ValueKey("browse_search_category_thumbnail_${category.name}"),
+              width: 96,
+              child: AspectRatio(
+                aspectRatio: 3 / 4,
+                child: ClipRRect(
+                  borderRadius: borderRadius,
+                  child: _CategoryThumbnail(category: category),
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    category.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    children: [
+                      const _SmallLiveDot(),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          category.viewers,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: mutedColor,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_BrowseCategory>("category", category));
+    properties.add(ObjectFlagProperty<VoidCallback>.has("onTap", onTap));
+  }
+}
+
+class _CategoryStreamsScreen extends StatefulWidget {
+  const _CategoryStreamsScreen({
+    required this.authController,
+    required this.category,
+  });
+
+  final TwitchAuthController authController;
+  final _BrowseCategory category;
+
+  @override
+  State<_CategoryStreamsScreen> createState() => _CategoryStreamsScreenState();
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<TwitchAuthController>("authController", authController));
+    properties.add(DiagnosticsProperty<_BrowseCategory>("category", category));
+  }
+}
+
+class _CategoryStreamsScreenState extends State<_CategoryStreamsScreen> {
+  final ScrollController _scrollController = ScrollController();
+  List<StreamChannel> _channels = const <StreamChannel>[];
+  bool _isLoading = false;
+  bool _loaded = false;
+  String? _cursor;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_loadMoreWhenNearBottom);
+    unawaited(_loadStreams(reset: true));
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadStreams({bool reset = false}) async {
+    if (_isLoading || (!reset && _loaded && _cursor == null)) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      if (reset) {
+        _cursor = null;
+      }
+    });
+
+    try {
+      final apiClient = await _loadBrowseApiClient(widget.authController);
+      final page = await apiClient.fetchLiveStreamsPage(
+        gameIds: [widget.category.id],
+        cursor: reset ? null : _cursor,
+      );
+      final usersById = await apiClient.fetchUsersByIds([
+        for (final stream in page.data) stream.userId,
+      ]);
+      final nextChannels = [
+        for (final stream in page.data)
+          if (usersById.containsKey(stream.userId))
+            _streamChannelFromStream(
+              stream,
+              avatarImageUrl: usersById[stream.userId]?.profileImageUrl,
+            ),
+      ];
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _channels = reset ? nextChannels : [..._channels, ...nextChannels];
+        _cursor = page.cursor;
+        _loaded = true;
+        _isLoading = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = _browseErrorMessage(error);
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _loadMoreWhenNearBottom() {
+    if (!_scrollController.hasClients || _scrollController.position.extentAfter > 420) {
+      return;
+    }
+    unawaited(_loadStreams());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const topScrollPadding = 84.0;
+    final bottomScrollPadding = 24 + MediaQuery.of(context).padding.bottom;
+
+    return Scaffold(
+      key: ValueKey("category_streams_page_${widget.category.name}"),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            FlowPullToRefresh(
+              scrollController: _scrollController,
+              onRefresh: () => _loadStreams(reset: true),
+              indicatorStartTop: topScrollPadding - 28,
+              indicatorMaxTravel: 52,
+              child: ListView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
+                ),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  topScrollPadding,
+                  AppSpacing.lg,
+                  0,
+                ).copyWith(bottom: bottomScrollPadding),
+                children: [
+                  if (_isLoading && _channels.isEmpty) ...[
+                    const LinearProgressIndicator(minHeight: 3),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  if (_errorMessage != null)
+                    _StatusMessage(message: _errorMessage!)
+                  else if (_channels.isEmpty && !_isLoading)
+                    _StatusMessage(
+                      message: "No live channels streaming ${widget.category.name}.",
+                    )
+                  else
+                    _LiveChannelsList(channels: _channels),
+                  if (_isLoading && _channels.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    const Center(
+                      child: SizedBox.square(
+                        dimension: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _CategoryStreamsTopBar(category: widget.category),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryStreamsTopBar extends StatelessWidget {
+  const _CategoryStreamsTopBar({required this.category});
+
+  final _BrowseCategory category;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final headerSurface = theme.scaffoldBackgroundColor;
+    final topAlpha = theme.brightness == Brightness.dark ? 0.92 : 0.94;
+    final bottomAlpha = theme.brightness == Brightness.dark ? 0.30 : 0.42;
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                headerSurface.withValues(alpha: topAlpha),
+                headerSurface.withValues(alpha: bottomAlpha),
+              ],
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.22),
+                width: 0.5,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 40,
+                height: PageHeaderTitle.fontSize * PageHeaderTitle.lineHeight,
+                child: IconButton(
+                  tooltip: "Back",
+                  onPressed: Navigator.of(context).pop,
+                  padding: EdgeInsets.zero,
+                  alignment: Alignment.centerLeft,
+                  icon: Icon(Icons.adaptive.arrow_back),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: PageHeaderTitle(
+                    key: ValueKey("category_streams_title_${category.name}"),
+                    title: category.name,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(DiagnosticsProperty<_BrowseCategory>("category", category));
+  }
+}
+
 class _SmallLiveDot extends StatelessWidget {
   const _SmallLiveDot();
 
@@ -717,6 +1279,28 @@ class _SmallLiveDot extends StatelessWidget {
       color: Color(0xFFF44336),
       shape: BoxShape.circle,
     ),
+  );
+}
+
+Future<_BrowseCategory> _browseCategoryFromApi(
+  TwitchApiClient apiClient,
+  TwitchCategory category,
+) async {
+  final streams = await apiClient.fetchLiveStreamsPage(
+    first: 100,
+    gameIds: [category.id],
+  );
+  final viewerCount = streams.data.fold<int>(
+    0,
+    (total, stream) => total + stream.viewerCount,
+  );
+
+  return _BrowseCategory(
+    id: category.id,
+    name: category.name,
+    viewers: _formatCompactCount(viewerCount),
+    imageUrl: _twitchBoxArtUrl(category.boxArtUrl),
+    colors: _colorsForText(category.id),
   );
 }
 
@@ -887,9 +1471,13 @@ class _LiveChannelsList extends StatelessWidget {
 }
 
 class _CategoryGrid extends StatelessWidget {
-  const _CategoryGrid({required this.categories});
+  const _CategoryGrid({
+    required this.categories,
+    required this.onCategorySelected,
+  });
 
   final List<_BrowseCategory> categories;
+  final ValueChanged<_BrowseCategory> onCategorySelected;
 
   @override
   Widget build(BuildContext context) {
@@ -908,7 +1496,10 @@ class _CategoryGrid extends StatelessWidget {
         mainAxisSpacing: 16,
         mainAxisExtent: _categoryTileExtent(context),
       ),
-      itemBuilder: (context, index) => _CategoryCard(category: categories[index]),
+      itemBuilder: (context, index) => _CategoryCard(
+        category: categories[index],
+        onTap: () => onCategorySelected(categories[index]),
+      ),
     );
   }
 
@@ -916,6 +1507,12 @@ class _CategoryGrid extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(IterableProperty<_BrowseCategory>("categories", categories));
+    properties.add(
+      ObjectFlagProperty<ValueChanged<_BrowseCategory>>.has(
+        "onCategorySelected",
+        onCategorySelected,
+      ),
+    );
   }
 }
 
@@ -927,59 +1524,67 @@ double _categoryTileExtent(BuildContext context) {
 }
 
 class _CategoryCard extends StatelessWidget {
-  const _CategoryCard({required this.category});
+  const _CategoryCard({
+    required this.category,
+    required this.onTap,
+  });
 
   final _BrowseCategory category;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Column(
+    return InkWell(
       key: ValueKey("browse_category_card_${category.name}"),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AspectRatio(
-          aspectRatio: 3 / 4,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            child: _CategoryThumbnail(category: category),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AspectRatio(
+            aspectRatio: 3 / 4,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: _CategoryThumbnail(category: category),
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          category.name,
-          key: ValueKey("browse_category_name_${category.name}"),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.86),
-            fontWeight: FontWeight.w800,
+          const SizedBox(height: 6),
+          Text(
+            category.name,
+            key: ValueKey("browse_category_name_${category.name}"),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.86),
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          key: ValueKey("browse_category_viewers_${category.name}"),
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const _SmallLiveDot(),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                category.viewers,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
-                  fontWeight: FontWeight.w800,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+          const SizedBox(height: 4),
+          Row(
+            key: ValueKey("browse_category_viewers_${category.name}"),
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const _SmallLiveDot(),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  category.viewers,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -987,6 +1592,7 @@ class _CategoryCard extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<_BrowseCategory>("category", category));
+    properties.add(ObjectFlagProperty<VoidCallback>.has("onTap", onTap));
   }
 }
 
@@ -1006,6 +1612,7 @@ class _CategoryThumbnail extends StatelessWidget {
     return Image.network(
       imageUrl,
       fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
       errorBuilder: (_, _, _) => fallback,
     );
   }
@@ -1222,5 +1829,15 @@ String? _twitchBoxArtUrl(String? template) {
   if (template == null || template.isEmpty) {
     return null;
   }
-  return template.replaceAll("{width}", "285").replaceAll("{height}", "380");
+  const width = "1200";
+  const height = "1600";
+  final templatedUrl = template.replaceAll("{width}", width).replaceAll("{height}", height);
+  if (templatedUrl != template) {
+    return templatedUrl;
+  }
+
+  return template.replaceFirstMapped(
+    RegExp(r"-\d+x\d+(\.[^/?#]+)([?#].*)?$"),
+    (match) => "-${width}x$height${match[1]}${match[2] ?? ""}",
+  );
 }
