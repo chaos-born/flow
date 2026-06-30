@@ -9,6 +9,7 @@ import "package:flow/app/spacing.dart";
 import "package:flow/features/following/following_screen.dart";
 import "package:flow/shared/widgets/app_bottom_nav.dart";
 import "package:flow/shared/widgets/avatar_ring.dart";
+import "package:flow/shared/widgets/page_header_title.dart";
 import "package:flutter/cupertino.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
@@ -318,7 +319,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const topScrollPadding = 158.0;
+    const topScrollPadding = 150.0;
     const bottomScrollPadding = 114.0;
 
     return Scaffold(
@@ -775,17 +776,9 @@ class _BrowseTopBar extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                "Browse",
-                key: const ValueKey("browse_title"),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.displaySmall?.copyWith(
-                  color: theme.colorScheme.onSurface,
-                  fontSize: 40,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                ),
+              const PageHeaderTitle(
+                key: ValueKey("browse_title"),
+                title: "Browse",
               ),
               const SizedBox(height: AppSpacing.md),
               TextField(

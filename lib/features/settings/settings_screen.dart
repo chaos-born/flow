@@ -6,6 +6,7 @@ import "package:flow/app/routes.dart";
 import "package:flow/app/spacing.dart";
 import "package:flow/shared/external_url_opener.dart";
 import "package:flow/shared/widgets/app_bottom_nav.dart";
+import "package:flow/shared/widgets/page_header_title.dart";
 import "package:flutter/cupertino.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
@@ -90,7 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const topScrollPadding = 88.0;
+    const topScrollPadding = 80.0;
     const bottomScrollPadding = 114.0;
 
     return Scaffold(
@@ -183,17 +184,9 @@ class _SettingsTopBar extends StatelessWidget {
             AppSpacing.lg,
             AppSpacing.xl,
           ),
-          child: Text(
-            "Settings",
-            key: const ValueKey("settings_title"),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.displaySmall?.copyWith(
-              color: theme.colorScheme.onSurface,
-              fontSize: 40,
-              fontWeight: FontWeight.w800,
-              height: 1,
-            ),
+          child: const PageHeaderTitle(
+            key: ValueKey("settings_title"),
+            title: "Settings",
           ),
         ),
       ),

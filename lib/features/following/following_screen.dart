@@ -10,6 +10,7 @@ import "package:flow/app/theme.dart";
 import "package:flow/features/following/twitch_login_screen.dart";
 import "package:flow/shared/widgets/app_bottom_nav.dart";
 import "package:flow/shared/widgets/avatar_ring.dart";
+import "package:flow/shared/widgets/page_header_title.dart";
 import "package:flow/shared/widgets/section_header.dart";
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
@@ -213,7 +214,7 @@ class _FollowingScreenState extends State<FollowingScreen> {
         : connection.usersById[connection.user.id] ?? connection.user;
     final offlineExpanded = _offlineExpandedOverride ?? liveChannels.isEmpty;
     final showLiveEmptyState = liveChannels.isEmpty && offlineChannels.isEmpty;
-    const topScrollPadding = 88.0;
+    const topScrollPadding = 80.0;
     const bottomScrollPadding = 114.0;
 
     return Scaffold(
@@ -381,7 +382,7 @@ class _FrostedTopBar extends StatelessWidget {
             AppSpacing.lg,
             AppSpacing.lg,
             AppSpacing.lg,
-            AppSpacing.xl,
+            AppSpacing.lg,
           ),
           child: _TopBarContent(
             onProfilePressed: onProfilePressed,
@@ -414,43 +415,32 @@ class _TopBarContent extends StatelessWidget {
   final String? profileImageUrl;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.colorScheme.onSurface;
-
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            "Following",
-            key: const ValueKey("following_title"),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.displaySmall?.copyWith(
-              color: textColor,
-              fontSize: 40,
-              fontWeight: FontWeight.w800,
-              height: 1,
-            ),
-          ),
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Expanded(
+        child: PageHeaderTitle(
+          key: ValueKey("following_title"),
+          title: "Following",
         ),
-        IconButton(
-          key: const ValueKey("profile_auth_button"),
-          tooltip: "Me",
-          onPressed: onProfilePressed,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 52, height: 52),
-          icon: AvatarRing(
-            key: const ValueKey("profile_avatar"),
-            initials: profileInitials,
-            size: 46,
-            avatarColors: const [Color(0xFF2C203F), Color(0xFFFFA3B1)],
-            imageUrl: profileImageUrl,
-          ),
+      ),
+      IconButton(
+        key: const ValueKey("profile_auth_button"),
+        tooltip: "Me",
+        onPressed: onProfilePressed,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+        alignment: Alignment.topRight,
+        icon: AvatarRing(
+          key: const ValueKey("profile_avatar"),
+          initials: profileInitials,
+          size: 36,
+          avatarColors: const [Color(0xFF2C203F), Color(0xFFFFA3B1)],
+          imageUrl: profileImageUrl,
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
