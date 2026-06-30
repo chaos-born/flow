@@ -111,11 +111,130 @@ void main() {
     );
   });
 
-  testWidgets("opens search and filters unavailable channels", (tester) async {
+  testWidgets("opens live channels for a tapped category", (tester) async {
+    final requestedUris = <Uri>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.dark),
+        home: BrowseScreen(
+          authController: _authController(
+            onRequest: (request) {
+              requestedUris.add(request.url);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    requestedUris.clear();
+    await tester.tap(find.byKey(const ValueKey("browse_category_card_Just Chatting")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("category_streams_page_Just Chatting")), findsOneWidget);
+    expect(find.byKey(const ValueKey("category_streams_title_Just Chatting")), findsOneWidget);
+    expect(find.byType(StreamCard), findsWidgets);
+    expect(find.text("AussieAntics"), findsOneWidget);
+    expect(find.text("NovaSkye"), findsOneWidget);
+    expect(
+      requestedUris.any(
+        (uri) =>
+            uri.path == "/helix/streams" &&
+            (uri.queryParametersAll["game_id"] ?? const <String>[]).contains("509658"),
+      ),
+      isTrue,
+    );
+  });
+
+  testWidgets("does not refresh when a top pull is pushed back up", (tester) async {
+    final requestedUris = <Uri>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.dark),
+        home: BrowseScreen(
+          authController: _authController(
+            onRequest: (request) {
+              requestedUris.add(request.url);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    requestedUris.clear();
+    final gesture = await tester.startGesture(tester.getCenter(find.byType(ListView)));
+    await gesture.moveBy(const Offset(0, 520));
+    await tester.pump();
+    expect(find.byKey(const ValueKey("pull_refresh_indicator")), findsOneWidget);
+
+    await gesture.moveBy(const Offset(0, -220));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      requestedUris.any(
+        (uri) => uri.path == "/helix/games/top" && !uri.queryParameters.containsKey("after"),
+      ),
+      isFalse,
+    );
+  });
+
+  testWidgets("shows recent search history and clears it", (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildFlowTheme(Brightness.dark),
         home: BrowseScreen(authController: _authController()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_field")));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Search channels or categories"), findsOneWidget);
+    expect(find.text("Search channels"), findsNothing);
+    expect(find.byKey(const ValueKey("browse_search_empty_history_icon")), findsOneWidget);
+    expect(find.text("No recent searches"), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey("browse_search_page_field")),
+      "mine",
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_clear_button")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("browse_search_history_header")), findsOneWidget);
+    expect(find.byKey(const ValueKey("browse_search_history_mine")), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_clear_history_button")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("browse_search_history_mine")), findsNothing);
+    expect(find.text("No recent searches"), findsOneWidget);
+  });
+
+  testWidgets("searches channels before categories and filters unavailable channels", (
+    tester,
+  ) async {
+    final requestedUris = <Uri>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.dark),
+        home: BrowseScreen(
+          authController: _authController(
+            onRequest: (request) {
+              requestedUris.add(request.url);
+            },
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -137,6 +256,53 @@ void main() {
       find.byKey(const ValueKey("browse_search_channel_BannedCreator")),
       findsNothing,
     );
+    expect(
+      find.byKey(const ValueKey("browse_search_category_Minecraft")),
+      findsOneWidget,
+    );
+    expect(
+      requestedUris.any((uri) => uri.path == "/helix/search/categories"),
+      isTrue,
+    );
+
+    expect(find.byKey(const ValueKey("browse_search_channels_header")), findsOneWidget);
+    expect(find.byKey(const ValueKey("browse_search_categories_header")), findsOneWidget);
+
+    final channelsHeaderTop = tester.getTopLeft(
+      find.byKey(const ValueKey("browse_search_channels_header")),
+    );
+    final channelTop = tester.getTopLeft(
+      find.byKey(const ValueKey("browse_search_channel_MinecraftCreator")),
+    );
+    final channelBottom = tester.getBottomLeft(
+      find.byKey(const ValueKey("browse_search_channel_MinecraftCreator")),
+    );
+    final categoriesHeaderTop = tester.getTopLeft(
+      find.byKey(const ValueKey("browse_search_categories_header")),
+    );
+    final categoryTop = tester.getTopLeft(
+      find.byKey(const ValueKey("browse_search_category_Minecraft")),
+    );
+    final categoryThumbnailImage = tester.widget<Image>(
+      find.descendant(
+        of: find.byKey(const ValueKey("browse_search_category_thumbnail_Minecraft")),
+        matching: find.byType(Image),
+      ),
+    );
+
+    expect(channelsHeaderTop.dy, lessThan(channelTop.dy));
+    expect(channelTop.dy, lessThan(categoryTop.dy));
+    expect(categoriesHeaderTop.dy, greaterThan(channelBottom.dy + 8));
+    expect(categoriesHeaderTop.dy, lessThan(categoryTop.dy));
+    expect(
+      (categoryThumbnailImage.image as NetworkImage).url,
+      contains("1200x1600"),
+    );
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_category_Minecraft")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("category_streams_page_Minecraft")), findsOneWidget);
   });
 }
 
@@ -228,6 +394,18 @@ MockClient _browseHttpClient({_RequestObserver? onRequest}) => MockClient((reque
     });
   }
 
+  if (request.url.path == "/helix/search/categories") {
+    return _jsonResponse({
+      "data": [
+        _categoryJson(
+          id: "27471",
+          name: "Minecraft",
+          boxArtUrl: "https://static-cdn.jtvnw.net/ttv-boxart/27471-52x72.jpg",
+        ),
+      ],
+    });
+  }
+
   if (request.url.path == "/helix/streams") {
     final gameIds = request.url.queryParametersAll["game_id"] ?? const <String>[];
     if (gameIds.contains("509658")) {
@@ -306,10 +484,11 @@ String _displayNameForUserId(String id) => switch (id) {
 Map<String, Object?> _categoryJson({
   required String id,
   required String name,
+  String? boxArtUrl,
 }) => {
   "id": id,
   "name": name,
-  "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/$id-{width}x{height}.jpg",
+  "box_art_url": boxArtUrl ?? "https://static-cdn.jtvnw.net/ttv-boxart/$id-{width}x{height}.jpg",
 };
 
 Map<String, Object?> _streamJson({

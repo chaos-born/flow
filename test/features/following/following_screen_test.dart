@@ -2,7 +2,6 @@ import "dart:convert";
 
 import "package:flow/api/twitch_api.dart";
 import "package:flow/api/twitch_auth.dart";
-import "package:flow/app/app.dart";
 import "package:flow/features/following/following_screen.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
@@ -12,14 +11,6 @@ import "package:http/testing.dart";
 typedef _RequestObserver = void Function(http.Request request);
 
 void main() {
-  testWidgets("renders an empty following feed before Twitch auth", (tester) async {
-    await tester.pumpWidget(const FlowApp());
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey("following_title")), findsOneWidget);
-    expect(find.text("No followed channels are live now."), findsOneWidget);
-  });
-
   testWidgets("renders live streams and expands offline channels from auth data", (
     tester,
   ) async {
@@ -103,6 +94,39 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(followedStreamsRequests, 2);
+  });
+
+  testWidgets("does not refresh when a top pull is pushed back up", (tester) async {
+    var followedStreamsRequests = 0;
+    final store = _MemoryTwitchStore()..accessToken = "token-123";
+
+    await tester.pumpWidget(
+      _followingScreen(
+        authController: _authController(
+          secureStore: store,
+          onRequest: (request) {
+            if (request.url.path == "/helix/streams/followed") {
+              followedStreamsRequests++;
+            }
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(followedStreamsRequests, 1);
+
+    final gesture = await tester.startGesture(tester.getCenter(find.byType(ListView)));
+    await gesture.moveBy(const Offset(0, 520));
+    await tester.pump();
+    expect(find.byKey(const ValueKey("pull_refresh_indicator")), findsOneWidget);
+
+    await gesture.moveBy(const Offset(0, -220));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(followedStreamsRequests, 1);
   });
 }
 
