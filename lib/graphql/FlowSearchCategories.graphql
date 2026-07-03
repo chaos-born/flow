@@ -1,0 +1,15 @@
+query FlowSearchCategories($query: String!, $first: Int, $after: Cursor) {
+  searchCategories(query: $query, first: $first, after: $after) {
+    edges {
+      cursor
+      node {
+        id
+        displayName
+        boxArtURL
+      }
+    }
+    pageInfo {
+      hasNextPage
+    }
+  }
+}

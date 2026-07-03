@@ -75,9 +75,11 @@ class _FollowingScreenState extends State<FollowingScreen> {
       config: config,
       secureStore: const SecureTwitchStore(),
       cookieExtractor: const MethodChannelTwitchCookieExtractor(),
-      apiClientFactory: (accessToken) => TwitchApiClient(
+      apiClientFactory: (accessToken, {gqlAccessToken}) => TwitchApiClient(
         clientId: config.clientId,
+        graphQlClientId: config.graphQlClientId,
         accessToken: accessToken,
+        gqlAccessToken: gqlAccessToken,
       ),
     );
   }

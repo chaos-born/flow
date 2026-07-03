@@ -1,5 +1,13 @@
-import "dart:convert";
-
+import "package:flow/graphql/FlowCurrentUser.graphql.dart";
+import "package:flow/graphql/FlowFollowedLiveUsers.graphql.dart";
+import "package:flow/graphql/FlowFollowedUsers.graphql.dart";
+import "package:flow/graphql/FlowGameStreams.graphql.dart";
+import "package:flow/graphql/FlowSearchCategories.graphql.dart";
+import "package:flow/graphql/FlowSearchChannels.graphql.dart";
+import "package:flow/graphql/FlowTopGames.graphql.dart";
+import "package:flow/graphql/FlowTopStreams.graphql.dart";
+import "package:flow/graphql/FlowUsers.graphql.dart";
+import "package:graphql/client.dart" as graphql;
 import "package:http/http.dart" as http;
 
 class TwitchApiException implements Exception {
@@ -124,12 +132,30 @@ class TwitchApiClient {
   TwitchApiClient({
     required this.clientId,
     required this.accessToken,
+    String? graphQlClientId,
+    this.gqlAccessToken,
     http.Client? httpClient,
-  }) : _httpClient = httpClient ?? http.Client();
+  }) : graphQlClientId = _nonEmptyValue(graphQlClientId) ?? defaultGraphQlClientId,
+       _httpClient = httpClient ?? http.Client();
+
+  static const _gqlEndpoint = "https://gql.twitch.tv/gql/";
+  static const _maxPageSize = 100;
+  static const _maxTopStreamsPageSize = 30;
+  static const defaultGraphQlClientId = "ue6666qo983tsx6so1t0vnawi233wa";
 
   final String clientId;
+  final String graphQlClientId;
   final String accessToken;
+  final String? gqlAccessToken;
   final http.Client _httpClient;
+
+  late final graphql.GraphQLClient _graphQlClient = _graphQlClientWithHeaders(
+    _graphQlHeaders(includeToken: false),
+  );
+
+  late final graphql.GraphQLClient _tokenGraphQlClient = _graphQlClientWithHeaders(
+    _graphQlHeaders(includeToken: true),
+  );
 
   Future<bool> validateAccessToken(String token) async {
     final uri = Uri.https("id.twitch.tv", "/oauth2/validate");
@@ -152,59 +178,113 @@ class TwitchApiClient {
   }
 
   Future<TwitchUser> fetchCurrentUser() async {
-    final payload = await _get("/helix/users");
-    final data = _dataList(payload);
-
-    if (data.isEmpty) {
+    final data = await _query(
+      () => _authenticatedGraphQlClient.query$FlowCurrentUser(
+        Options$Query$FlowCurrentUser(
+          fetchPolicy: graphql.FetchPolicy.noCache,
+        ),
+      ),
+      "FlowCurrentUser",
+    );
+    final user = _mapValue(data.toJson()["currentUser"]);
+    if (user == null) {
       throw TwitchApiException("Twitch returned no current user.");
     }
 
-    final user = data.first;
-    return TwitchUser(
-      id: _stringValue(user["id"]),
-      login: _stringValue(user["login"]),
-      displayName: _stringValue(user["display_name"]),
-      profileImageUrl: user["profile_image_url"] as String?,
-    );
+    return _userFromGraphQlUser(user);
   }
 
   Future<List<TwitchFollowedStream>> fetchFollowedStreams(String userId) async {
-    final data = await _getPaginatedData("/helix/streams/followed", {
-      "user_id": userId,
-    });
+    final streams = <TwitchFollowedStream>[];
+    String? after;
 
-    return [for (final item in data) _streamFromItem(item)];
+    do {
+      final data = await _query(
+        () => _authenticatedGraphQlClient.query$FlowFollowedLiveUsers(
+          Options$Query$FlowFollowedLiveUsers(
+            variables: Variables$Query$FlowFollowedLiveUsers(
+              first: 100,
+              after: after,
+            ),
+            fetchPolicy: graphql.FetchPolicy.noCache,
+          ),
+        ),
+        "FlowFollowedLiveUsers",
+      );
+      final currentUser = _mapValue(data.toJson()["currentUser"]);
+      final connection = _mapValue(currentUser?["followedLiveUsers"]);
+
+      for (final edge in _edgeList(connection)) {
+        final node = _mapValue(edge["node"]);
+        final stream = _mapValue(node?["stream"]);
+        if (node != null && stream != null) {
+          streams.add(_streamFromGraphQlStream(stream, fallbackBroadcaster: node));
+        }
+      }
+
+      after = _connectionCursor(connection);
+    } while (after != null && after.isNotEmpty);
+
+    return streams;
   }
 
   Future<List<TwitchFollowedChannel>> fetchFollowedChannels(
     String userId,
   ) async {
-    final data = await _getPaginatedData("/helix/channels/followed", {
-      "user_id": userId,
-    });
+    final channels = <TwitchFollowedChannel>[];
+    String? after;
 
-    return [
-      for (final item in data)
-        TwitchFollowedChannel(
-          broadcasterId: _stringValue(item["broadcaster_id"]),
-          broadcasterLogin: _stringValue(item["broadcaster_login"]),
-          broadcasterName: _stringValue(item["broadcaster_name"]),
-          followedAt: _dateTimeValue(item["followed_at"]),
+    do {
+      final data = await _query(
+        () => _authenticatedGraphQlClient.query$FlowFollowedUsers(
+          Options$Query$FlowFollowedUsers(
+            variables: Variables$Query$FlowFollowedUsers(
+              first: 100,
+              after: after,
+            ),
+            fetchPolicy: graphql.FetchPolicy.noCache,
+          ),
         ),
-    ];
+        "FlowFollowedUsers",
+      );
+      final currentUser = _mapValue(data.toJson()["currentUser"]);
+      final connection = _mapValue(currentUser?["follows"]);
+
+      for (final edge in _edgeList(connection)) {
+        final node = _mapValue(edge["node"]);
+        if (node == null) {
+          continue;
+        }
+        channels.add(
+          TwitchFollowedChannel(
+            broadcasterId: _stringValue(node["id"]),
+            broadcasterLogin: _stringValue(node["login"]),
+            broadcasterName: _stringValue(node["displayName"]),
+            followedAt: _dateTimeValue(edge["followedAt"]),
+          ),
+        );
+      }
+
+      after = _connectionCursor(connection);
+    } while (after != null && after.isNotEmpty);
+
+    return channels;
   }
 
   Future<Map<String, TwitchUser>> fetchUsersByIds(List<String> ids) async {
     final users = <String, TwitchUser>{};
     for (final batch in _batches(ids)) {
-      final payload = await _get("/helix/users", {"id": batch});
-      for (final item in _dataList(payload)) {
-        final user = TwitchUser(
-          id: _stringValue(item["id"]),
-          login: _stringValue(item["login"]),
-          displayName: _stringValue(item["display_name"]),
-          profileImageUrl: item["profile_image_url"] as String?,
-        );
+      final data = await _query(
+        () => _graphQlClient.query$FlowUsers(
+          Options$Query$FlowUsers(
+            variables: Variables$Query$FlowUsers(ids: batch),
+            fetchPolicy: graphql.FetchPolicy.noCache,
+          ),
+        ),
+        "FlowUsers",
+      );
+      for (final item in _mapList(data.toJson()["users"])) {
+        final user = _userFromGraphQlUser(item);
         users[user.id] = user;
       }
     }
@@ -216,13 +296,23 @@ class TwitchApiClient {
   ) async {
     final channels = <String, TwitchChannelInfo>{};
     for (final batch in _batches(broadcasterIds)) {
-      final payload = await _get("/helix/channels", {"broadcaster_id": batch});
-      for (final item in _dataList(payload)) {
+      final data = await _query(
+        () => _graphQlClient.query$FlowUsers(
+          Options$Query$FlowUsers(
+            variables: Variables$Query$FlowUsers(ids: batch),
+            fetchPolicy: graphql.FetchPolicy.noCache,
+          ),
+        ),
+        "FlowUsers",
+      );
+      for (final item in _mapList(data.toJson()["users"])) {
+        final broadcastSettings = _mapValue(item["broadcastSettings"]);
+        final game = _mapValue(broadcastSettings?["game"]);
         final channel = TwitchChannelInfo(
-          broadcasterId: _stringValue(item["broadcaster_id"]),
-          broadcasterName: _stringValue(item["broadcaster_name"]),
-          gameName: _stringValue(item["game_name"]),
-          title: _stringValue(item["title"]),
+          broadcasterId: _stringValue(item["id"]),
+          broadcasterName: _stringValue(item["displayName"]),
+          gameName: _stringValue(game?["displayName"]),
+          title: _stringValue(broadcastSettings?["title"]),
         );
         channels[channel.broadcasterId] = channel;
       }
@@ -239,17 +329,20 @@ class TwitchApiClient {
     int first = 12,
     String? cursor,
   }) async {
-    final queryParameters = <String, dynamic>{"first": _boundedFirst(first)};
-    if (cursor != null && cursor.isNotEmpty) {
-      queryParameters["after"] = cursor;
-    }
-
-    final payload = await _get("/helix/games/top", queryParameters);
-
-    return TwitchPage<TwitchCategory>(
-      data: [for (final item in _dataList(payload)) _categoryFromItem(item)],
-      cursor: _paginationCursor(payload),
+    final data = await _query(
+      () => _graphQlClient.query$FlowTopGames(
+        Options$Query$FlowTopGames(
+          variables: Variables$Query$FlowTopGames(
+            first: _boundedFirst(first),
+            after: _nonEmptyValue(cursor),
+          ),
+          fetchPolicy: graphql.FetchPolicy.noCache,
+        ),
+      ),
+      "FlowTopGames",
     );
+
+    return _categoryPageFromConnection(_mapValue(data.toJson()["games"]));
   }
 
   Future<List<TwitchCategory>> searchCategories(
@@ -270,19 +363,22 @@ class TwitchApiClient {
       return const TwitchPage<TwitchCategory>(data: [], cursor: null);
     }
 
-    final queryParameters = <String, dynamic>{
-      "query": normalizedQuery,
-      "first": _boundedFirst(first),
-    };
-    if (cursor != null && cursor.isNotEmpty) {
-      queryParameters["after"] = cursor;
-    }
+    final data = await _query(
+      () => _graphQlClient.query$FlowSearchCategories(
+        Options$Query$FlowSearchCategories(
+          variables: Variables$Query$FlowSearchCategories(
+            query: normalizedQuery,
+            first: _boundedFirst(first),
+            after: _nonEmptyValue(cursor),
+          ),
+          fetchPolicy: graphql.FetchPolicy.noCache,
+        ),
+      ),
+      "FlowSearchCategories",
+    );
 
-    final payload = await _get("/helix/search/categories", queryParameters);
-
-    return TwitchPage<TwitchCategory>(
-      data: [for (final item in _dataList(payload)) _categoryFromItem(item)],
-      cursor: _paginationCursor(payload),
+    return _categoryPageFromConnection(
+      _mapValue(data.toJson()["searchCategories"]),
     );
   }
 
@@ -305,26 +401,36 @@ class TwitchApiClient {
     List<String> userLogins = const [],
     String? cursor,
   }) async {
-    final queryParameters = <String, dynamic>{
-      "first": _boundedFirst(first),
-    };
-    if (cursor != null && cursor.isNotEmpty) {
-      queryParameters["after"] = cursor;
-    }
     final normalizedGameIds = _nonEmptyValues(gameIds);
     final normalizedUserLogins = _nonEmptyValues(userLogins);
+
     if (normalizedGameIds.isNotEmpty) {
-      queryParameters["game_id"] = normalizedGameIds;
-    }
-    if (normalizedUserLogins.isNotEmpty) {
-      queryParameters["user_login"] = normalizedUserLogins;
+      return _fetchGameStreamsPage(
+        gameId: normalizedGameIds.first,
+        first: first,
+        cursor: cursor,
+        userLogins: normalizedUserLogins,
+      );
     }
 
-    final payload = await _get("/helix/streams", queryParameters);
-    return TwitchPage<TwitchFollowedStream>(
-      data: [for (final item in _dataList(payload)) _streamFromItem(item)],
-      cursor: _paginationCursor(payload),
+    if (normalizedUserLogins.isNotEmpty) {
+      return _fetchUserStreamsPage(normalizedUserLogins);
+    }
+
+    final data = await _query(
+      () => _graphQlClient.query$FlowTopStreams(
+        Options$Query$FlowTopStreams(
+          variables: Variables$Query$FlowTopStreams(
+            first: _boundedFirst(first, max: _maxTopStreamsPageSize),
+            after: _nonEmptyValue(cursor),
+          ),
+          fetchPolicy: graphql.FetchPolicy.noCache,
+        ),
+      ),
+      "FlowTopStreams",
     );
+
+    return _streamPageFromConnection(_mapValue(data.toJson()["streams"]));
   }
 
   Future<List<TwitchSearchChannel>> searchLiveChannels(
@@ -346,102 +452,266 @@ class TwitchApiClient {
       return const TwitchPage<TwitchSearchChannel>(data: [], cursor: null);
     }
 
-    final queryParameters = <String, dynamic>{
-      "query": normalizedQuery,
-      "first": _boundedFirst(first),
-    };
-    if (cursor != null && cursor.isNotEmpty) {
-      queryParameters["after"] = cursor;
-    }
-    if (liveOnly) {
-      queryParameters["live_only"] = "true";
-    }
-
-    final payload = await _get("/helix/search/channels", queryParameters);
-
-    return TwitchPage<TwitchSearchChannel>(
-      data: [
-        for (final item in _dataList(payload))
-          TwitchSearchChannel(
-            id: _stringValue(item["id"]),
-            broadcasterLogin: _stringValue(item["broadcaster_login"]),
-            displayName: _stringValue(item["display_name"]),
-            gameName: _stringValue(item["game_name"]),
-            title: _stringValue(item["title"]),
-            thumbnailUrl: item["thumbnail_url"] as String?,
-            startedAt: _dateTimeValue(item["started_at"]),
-            isLive: item["is_live"] == true || _stringValue(item["is_live"]) == "true",
+    final data = await _query(
+      () => _graphQlClient.query$FlowSearchChannels(
+        Options$Query$FlowSearchChannels(
+          variables: Variables$Query$FlowSearchChannels(
+            queryFragment: normalizedQuery,
+            withOfflineChannelContent: !liveOnly,
           ),
+          fetchPolicy: graphql.FetchPolicy.noCache,
+        ),
+      ),
+      "FlowSearchChannels",
+    );
+    final channels = <TwitchSearchChannel>[];
+    final suggestions = _mapValue(data.toJson()["searchSuggestions"]);
+    for (final edge in _mapList(suggestions?["edges"])) {
+      final node = _mapValue(edge["node"]);
+      final content = _mapValue(node?["content"]);
+      if (content?["__typename"] != "SearchSuggestionChannel") {
+        continue;
+      }
+      final channel = _searchChannelFromGraphQlContent(
+        content!,
+        fallbackDisplayName: _stringValue(node?["text"]),
+      );
+      if (!liveOnly || channel.isLive) {
+        channels.add(channel);
+      }
+      if (channels.length >= _boundedFirst(first)) {
+        break;
+      }
+    }
+
+    return TwitchPage<TwitchSearchChannel>(data: channels, cursor: null);
+  }
+
+  Future<TwitchPage<TwitchFollowedStream>> _fetchGameStreamsPage({
+    required String gameId,
+    required int first,
+    required String? cursor,
+    required List<String> userLogins,
+  }) async {
+    final data = await _query(
+      () => _graphQlClient.query$FlowGameStreams(
+        Options$Query$FlowGameStreams(
+          variables: Variables$Query$FlowGameStreams(
+            id: gameId,
+            first: _boundedFirst(first),
+            after: _nonEmptyValue(cursor),
+          ),
+          fetchPolicy: graphql.FetchPolicy.noCache,
+        ),
+      ),
+      "FlowGameStreams",
+    );
+    final game = _mapValue(data.toJson()["game"]);
+    final page = _streamPageFromConnection(_mapValue(game?["streams"]));
+    if (userLogins.isEmpty) {
+      return page;
+    }
+
+    final allowedLogins = userLogins.map((value) => value.toLowerCase()).toSet();
+    return TwitchPage<TwitchFollowedStream>(
+      data: [
+        for (final stream in page.data)
+          if (allowedLogins.contains(stream.userLogin.toLowerCase())) stream,
       ],
-      cursor: _paginationCursor(payload),
+      cursor: page.cursor,
     );
   }
 
-  Future<Map<String, Object?>> _get(
-    String path, [
-    Map<String, dynamic> queryParameters = const {},
-  ]) async {
-    final uri = Uri.https("api.twitch.tv", path, queryParameters);
-    final response = await _httpClient.get(uri, headers: _headers);
+  Future<TwitchPage<TwitchFollowedStream>> _fetchUserStreamsPage(
+    List<String> userLogins,
+  ) async {
+    final streams = <TwitchFollowedStream>[];
+    for (final batch in _batches(userLogins)) {
+      final data = await _query(
+        () => _graphQlClient.query$FlowUsers(
+          Options$Query$FlowUsers(
+            variables: Variables$Query$FlowUsers(logins: batch),
+            fetchPolicy: graphql.FetchPolicy.noCache,
+          ),
+        ),
+        "FlowUsers",
+      );
+      for (final user in _mapList(data.toJson()["users"])) {
+        final stream = _mapValue(user["stream"]);
+        if (stream != null) {
+          streams.add(_streamFromGraphQlStream(stream, fallbackBroadcaster: user));
+        }
+      }
+    }
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+    return TwitchPage<TwitchFollowedStream>(data: streams, cursor: null);
+  }
+
+  Future<T> _query<T>(
+    Future<graphql.QueryResult<T>> Function() request,
+    String operationName,
+  ) async {
+    final result = await request();
+    final exception = result.exception;
+    if (exception != null) {
       throw TwitchApiException(
-        "Twitch request failed (${response.statusCode}): ${response.body}",
+        "Twitch GraphQL $operationName failed: ${_graphQlExceptionMessage(exception)}",
       );
     }
 
-    final body = jsonDecode(response.body);
-    if (body is! Map<String, Object?>) {
-      throw TwitchApiException("Twitch returned an unexpected response.");
+    final data = result.parsedData;
+    if (data == null) {
+      throw TwitchApiException(
+        "Twitch GraphQL $operationName returned no data.",
+      );
     }
-
-    return body;
-  }
-
-  Future<List<Map<String, Object?>>> _getPaginatedData(
-    String path,
-    Map<String, String> queryParameters,
-  ) async {
-    final data = <Map<String, Object?>>[];
-    String? after;
-
-    do {
-      final pageQueryParameters = {...queryParameters, "first": "100"};
-      if (after != null) {
-        pageQueryParameters["after"] = after;
-      }
-
-      final payload = await _get(path, pageQueryParameters);
-      data.addAll(_dataList(payload));
-      after = _paginationCursor(payload);
-    } while (after != null && after.isNotEmpty);
-
     return data;
   }
 
-  Map<String, String> get _headers => {
-    "Authorization": "Bearer $accessToken",
-    "Client-ID": clientId,
-  };
+  graphql.GraphQLClient _graphQlClientWithHeaders(
+    Map<String, String> headers,
+  ) => graphql.GraphQLClient(
+    cache: graphql.GraphQLCache(store: graphql.InMemoryStore()),
+    link: graphql.HttpLink(
+      _gqlEndpoint,
+      defaultHeaders: headers,
+      httpClient: _httpClient,
+    ),
+  );
 
-  static List<Map<String, Object?>> _dataList(Map<String, Object?> payload) {
-    final data = payload["data"];
-    if (data is! List) {
-      return const [];
+  graphql.GraphQLClient get _authenticatedGraphQlClient {
+    if (_nonEmptyValue(gqlAccessToken) == null) {
+      throw TwitchApiException("Twitch GraphQL auth token is missing.");
     }
-
-    return [
-      for (final item in data)
-        if (item is Map<String, Object?>) item,
-    ];
+    return _tokenGraphQlClient;
   }
 
-  static String? _paginationCursor(Map<String, Object?> payload) {
-    final pagination = payload["pagination"];
-    if (pagination is! Map<String, Object?>) {
+  Map<String, String> _graphQlHeaders({required bool includeToken}) {
+    final headers = {
+      "Client-Id": graphQlClientId,
+      "Content-Type": "application/json",
+    };
+    final token = _nonEmptyValue(gqlAccessToken);
+    if (includeToken && token != null) {
+      headers["Authorization"] = _oauthAuthorizationHeader(token);
+    }
+    return headers;
+  }
+
+  static String _oauthAuthorizationHeader(String token) {
+    final trimmedToken = token.trim();
+    if (trimmedToken.toLowerCase().startsWith("oauth ")) {
+      return trimmedToken;
+    }
+    return "OAuth $trimmedToken";
+  }
+
+  static TwitchPage<TwitchCategory> _categoryPageFromConnection(
+    Map<String, Object?>? connection,
+  ) => TwitchPage<TwitchCategory>(
+    data: [
+      for (final edge in _edgeList(connection))
+        if (_mapValue(edge["node"]) case final node?)
+          TwitchCategory(
+            id: _stringValue(node["id"]),
+            name: _stringValue(node["displayName"]),
+            boxArtUrl: node["boxArtURL"] as String?,
+          ),
+    ],
+    cursor: _connectionCursor(connection),
+  );
+
+  static TwitchPage<TwitchFollowedStream> _streamPageFromConnection(
+    Map<String, Object?>? connection,
+  ) => TwitchPage<TwitchFollowedStream>(
+    data: [
+      for (final edge in _edgeList(connection))
+        if (_mapValue(edge["node"]) case final node?) _streamFromGraphQlStream(node),
+    ],
+    cursor: _connectionCursor(connection),
+  );
+
+  static List<Map<String, Object?>> _edgeList(
+    Map<String, Object?>? connection,
+  ) => _mapList(connection?["edges"]);
+
+  static String? _connectionCursor(Map<String, Object?>? connection) {
+    final pageInfo = _mapValue(connection?["pageInfo"]);
+    if (pageInfo?["hasNextPage"] != true) {
       return null;
     }
-    return pagination["cursor"] as String?;
+
+    final edges = _edgeList(connection);
+    if (edges.isEmpty) {
+      return null;
+    }
+    return _nonEmptyValue(edges.last["cursor"]?.toString());
+  }
+
+  static TwitchUser _userFromGraphQlUser(Map<String, Object?> user) => TwitchUser(
+    id: _stringValue(user["id"]),
+    login: _stringValue(user["login"]),
+    displayName: _stringValue(user["displayName"]),
+    profileImageUrl: user["profileImageURL"] as String?,
+  );
+
+  static TwitchFollowedStream _streamFromGraphQlStream(
+    Map<String, Object?> stream, {
+    Map<String, Object?>? fallbackBroadcaster,
+  }) {
+    final broadcaster = <String, Object?>{
+      ...?fallbackBroadcaster,
+      ...?_mapValue(stream["broadcaster"]),
+    };
+    final broadcastSettings =
+        _mapValue(broadcaster["broadcastSettings"]) ?? _mapValue(stream["broadcastSettings"]);
+    final game = _mapValue(stream["game"]);
+    final tags = <String>[];
+    for (final tag in _mapList(stream["freeformTags"])) {
+      final name = _nonEmptyValue(tag["name"]?.toString());
+      if (name != null) {
+        tags.add(name);
+      }
+    }
+
+    return TwitchFollowedStream(
+      id: _stringValue(stream["id"]),
+      userId: _stringValue(broadcaster["id"]),
+      userLogin: _stringValue(broadcaster["login"]),
+      userName: _stringValue(broadcaster["displayName"]),
+      gameName: _stringValue(game?["displayName"]),
+      title: _stringValue(broadcastSettings?["title"]),
+      viewerCount: _intValue(stream["viewersCount"]),
+      thumbnailUrl: stream["previewImageURL"] as String?,
+      startedAt: _dateTimeValue(stream["createdAt"]),
+      tags: tags,
+    );
+  }
+
+  static TwitchSearchChannel _searchChannelFromGraphQlContent(
+    Map<String, Object?> content, {
+    String fallbackDisplayName = "",
+  }) {
+    final user = _mapValue(content["user"]);
+    final stream = _mapValue(user?["stream"]);
+    final game = _mapValue(stream?["game"]);
+    final broadcaster = _mapValue(stream?["broadcaster"]);
+    final broadcastSettings = _mapValue(broadcaster?["broadcastSettings"]);
+    final isLive = content["isLive"] == true || stream != null;
+
+    return TwitchSearchChannel(
+      id: _stringValue(content["id"]),
+      broadcasterLogin: _stringValue(content["login"]),
+      displayName: _stringValue(
+        user?["displayName"] ??
+            (fallbackDisplayName.isEmpty ? content["login"] : fallbackDisplayName),
+      ),
+      gameName: _stringValue(game?["displayName"]),
+      title: _stringValue(broadcastSettings?["title"]),
+      thumbnailUrl: content["profileImageURL"] as String?,
+      startedAt: _dateTimeValue(stream?["createdAt"]),
+      isLive: isLive,
+    );
   }
 
   static DateTime? _dateTimeValue(Object? value) {
@@ -449,16 +719,6 @@ class TwitchApiClient {
       return null;
     }
     return DateTime.tryParse(value)?.toLocal();
-  }
-
-  static List<String> _stringList(Object? value) {
-    if (value is! List) {
-      return const [];
-    }
-    return [
-      for (final item in value)
-        if (item != null) item.toString(),
-    ];
   }
 
   static Iterable<List<String>> _batches(List<String> values) sync* {
@@ -469,33 +729,64 @@ class TwitchApiClient {
     }
   }
 
-  static String _boundedFirst(int value) => value.clamp(1, 100).toString();
-
-  static TwitchCategory _categoryFromItem(Map<String, Object?> item) => TwitchCategory(
-    id: _stringValue(item["id"]),
-    name: _stringValue(item["name"]),
-    boxArtUrl: item["box_art_url"] as String?,
-  );
+  static int _boundedFirst(int value, {int max = _maxPageSize}) => value.clamp(1, max);
 
   static List<String> _nonEmptyValues(List<String> values) => [
     for (final value in values)
       if (value.trim().isNotEmpty) value.trim(),
   ];
 
-  static TwitchFollowedStream _streamFromItem(Map<String, Object?> item) => TwitchFollowedStream(
-    id: _stringValue(item["id"]),
-    userId: _stringValue(item["user_id"]),
-    userLogin: _stringValue(item["user_login"]),
-    userName: _stringValue(item["user_name"]),
-    gameName: _stringValue(item["game_name"]),
-    title: _stringValue(item["title"]),
-    viewerCount: item["viewer_count"] is int
-        ? item["viewer_count"]! as int
-        : int.tryParse('${item['viewer_count']}') ?? 0,
-    thumbnailUrl: item["thumbnail_url"] as String?,
-    startedAt: _dateTimeValue(item["started_at"]),
-    tags: _stringList(item["tags"]),
-  );
+  static String? _nonEmptyValue(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  static Map<String, Object?>? _mapValue(Object? value) {
+    if (value is Map<String, Object?>) {
+      return value;
+    }
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return null;
+  }
+
+  static List<Map<String, Object?>> _mapList(Object? value) {
+    if (value is! List) {
+      return const [];
+    }
+    final maps = <Map<String, Object?>>[];
+    for (final item in value) {
+      final map = _mapValue(item);
+      if (map != null) {
+        maps.add(map);
+      }
+    }
+    return maps;
+  }
+
+  static int _intValue(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    return int.tryParse(value?.toString() ?? "") ?? 0;
+  }
 
   static String _stringValue(Object? value) => value?.toString() ?? "";
+
+  static String _graphQlExceptionMessage(graphql.OperationException exception) {
+    if (exception.graphqlErrors.isNotEmpty) {
+      return exception.graphqlErrors.map((error) => error.message).join("; ");
+    }
+
+    final linkException = exception.linkException;
+    if (linkException != null) {
+      return linkException.toString();
+    }
+
+    return exception.toString();
+  }
 }

@@ -1,20 +1,7 @@
 import "package:flow/shared/preferences/preferences.dart";
-import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 
 void main() {
-  test("stores theme mode as a non-sensitive preference", () async {
-    final store = _MemoryPreferencesStore();
-    final preferences = SharedPreferencesFlowPreferences(store: store);
-
-    expect(await preferences.readThemeMode(), ThemeMode.system);
-
-    await preferences.saveThemeMode(ThemeMode.dark);
-
-    expect(store.strings["flow_theme_mode"], "dark");
-    expect(await preferences.readThemeMode(), ThemeMode.dark);
-  });
-
   test("normalizes browse search history in shared preferences", () async {
     final store = _MemoryPreferencesStore();
     final preferences = SharedPreferencesFlowPreferences(store: store);

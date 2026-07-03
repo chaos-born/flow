@@ -1,0 +1,8 @@
+query FlowCurrentUser {
+  currentUser {
+    id
+    login
+    displayName
+    profileImageURL(width: 300)
+  }
+}

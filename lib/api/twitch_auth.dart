@@ -8,7 +8,11 @@ import "package:flutter_secure_storage/flutter_secure_storage.dart";
 export "package:flow/api/twitch_cookie_extractor.dart";
 
 typedef OAuthStateGenerator = String Function();
-typedef TwitchApiClientFactory = TwitchApiClient Function(String accessToken);
+typedef TwitchApiClientFactory =
+    TwitchApiClient Function(
+      String accessToken, {
+      String? gqlAccessToken,
+    });
 
 class TwitchAuthException implements Exception {
   TwitchAuthException(this.message);
@@ -22,12 +26,17 @@ class TwitchAuthException implements Exception {
 class TwitchAuthConfig {
   const TwitchAuthConfig({
     required this.clientId,
+    this.graphQlClientId = TwitchApiClient.defaultGraphQlClientId,
     this.redirectUri = defaultRedirectUri,
     this.scope = "user:read:follows",
   });
 
   const TwitchAuthConfig.fromEnvironment()
     : clientId = const String.fromEnvironment("TWITCH_CLIENT_ID"),
+      graphQlClientId = const String.fromEnvironment(
+        "TWITCH_GQL_CLIENT_ID",
+        defaultValue: TwitchApiClient.defaultGraphQlClientId,
+      ),
       redirectUri = const String.fromEnvironment(
         "TWITCH_REDIRECT_URI",
         defaultValue: defaultRedirectUri,
@@ -37,6 +46,7 @@ class TwitchAuthConfig {
   static const defaultRedirectUri = "https://twitch.tv/login";
 
   final String clientId;
+  final String graphQlClientId;
   final String redirectUri;
   final String scope;
 
@@ -196,16 +206,20 @@ class TwitchAuthController {
       expectedState: expectedState ?? "",
     );
 
-    final apiClient = apiClientFactory(callback.accessToken);
-    final isValid = await apiClient.validateAccessToken(callback.accessToken);
+    final validationClient = apiClientFactory(callback.accessToken);
+    final isValid = await validationClient.validateAccessToken(callback.accessToken);
     if (!isValid) {
       throw TwitchAuthException("Twitch access token is invalid.");
     }
 
     await secureStore.saveAccessToken(callback.accessToken);
     await secureStore.clearPendingState();
-    await extractAndStoreWebSessionToken();
+    final gqlAccessToken = await extractAndStoreWebSessionToken();
 
+    final apiClient = apiClientFactory(
+      callback.accessToken,
+      gqlAccessToken: gqlAccessToken,
+    );
     return _fetchConnection(apiClient);
   }
 
@@ -219,7 +233,11 @@ class TwitchAuthController {
       return null;
     }
 
-    final apiClient = apiClientFactory(accessToken);
+    final gqlAccessToken = await secureStore.readWebSessionToken();
+    final apiClient = apiClientFactory(
+      accessToken,
+      gqlAccessToken: gqlAccessToken,
+    );
     final isValid = await apiClient.validateAccessToken(accessToken);
     if (!isValid) {
       return null;
@@ -253,13 +271,15 @@ class TwitchAuthController {
     );
   }
 
-  Future<void> extractAndStoreWebSessionToken() async {
+  Future<String?> extractAndStoreWebSessionToken() async {
     final webSessionToken = await cookieExtractor.extractTwitchAuthToken();
-    if (webSessionToken == null || webSessionToken.isEmpty) {
-      return;
+    final token = webSessionToken?.trim();
+    if (token == null || token.isEmpty) {
+      return null;
     }
 
-    await secureStore.saveWebSessionToken(webSessionToken);
+    await secureStore.saveWebSessionToken(token);
+    return token;
   }
 }
 

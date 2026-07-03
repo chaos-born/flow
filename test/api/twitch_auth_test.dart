@@ -19,9 +19,11 @@ void main() {
 
   test("completes Twitch auth and loads following data", () async {
     final store = _MemoryTwitchStore();
+    final gqlAuthorizationHeaders = <String, String?>{};
     final controller = _authController(
       secureStore: store,
       cookieExtractor: const _StaticCookieExtractor("cookie-token-123"),
+      gqlAuthorizationHeaders: gqlAuthorizationHeaders,
     );
 
     await controller.createAuthorizationUri();
@@ -38,96 +40,183 @@ void main() {
     expect(connection.user.displayName, "Flow Tester");
     expect(connection.followedStreams.single.userName, "AussieAntics");
     expect(connection.followedChannels.single.broadcasterName, "NovaSkye");
+    expect(gqlAuthorizationHeaders["FlowCurrentUser"], "OAuth cookie-token-123");
+    expect(gqlAuthorizationHeaders["FlowFollowedLiveUsers"], "OAuth cookie-token-123");
+    expect(gqlAuthorizationHeaders["FlowFollowedUsers"], "OAuth cookie-token-123");
+    expect(gqlAuthorizationHeaders["FlowUsers"], isNull);
   });
 }
 
 TwitchAuthController _authController({
   required _MemoryTwitchStore secureStore,
   TwitchCookieExtractor cookieExtractor = const _StaticCookieExtractor(),
+  Map<String, String?>? gqlAuthorizationHeaders,
 }) => TwitchAuthController(
   config: const TwitchAuthConfig(clientId: "client-123"),
   secureStore: secureStore,
   stateGenerator: () => "state-123",
-  apiClientFactory: (accessToken) => TwitchApiClient(
+  apiClientFactory: (accessToken, {gqlAccessToken}) => TwitchApiClient(
     clientId: "client-123",
     accessToken: accessToken,
-    httpClient: _authHttpClient(),
+    gqlAccessToken: gqlAccessToken,
+    httpClient: _authHttpClient(
+      gqlAuthorizationHeaders: gqlAuthorizationHeaders,
+    ),
   ),
   cookieExtractor: cookieExtractor,
 );
 
-MockClient _authHttpClient() => MockClient((request) async {
+MockClient _authHttpClient({
+  Map<String, String?>? gqlAuthorizationHeaders,
+}) => MockClient((request) async {
   if (request.url.host == "id.twitch.tv" && request.url.path == "/oauth2/validate") {
     return _jsonResponse({"client_id": "client-123", "user_id": "user-123"});
   }
 
-  if (request.url.path == "/helix/users") {
-    final ids = request.url.queryParametersAll["id"];
-    if (ids != null) {
+  if (request.url.host == "gql.twitch.tv") {
+    final query = _graphQlQuery(request);
+    final variables = _graphQlVariables(request);
+
+    if (query.contains("FlowCurrentUser")) {
+      gqlAuthorizationHeaders?["FlowCurrentUser"] = request.headers["Authorization"];
       return _jsonResponse({
-        "data": [
-          for (final id in ids)
-            {
-              "id": id,
-              "login": "aussieantics",
-              "display_name": "AussieAntics",
-              "profile_image_url": "https://static-cdn.jtvnw.net/$id.png",
-            },
-        ],
+        "data": {
+          "currentUser": {
+            "id": "user-123",
+            "login": "flowtester",
+            "displayName": "Flow Tester",
+            "profileImageURL": "https://static-cdn.jtvnw.net/user-123.png",
+          },
+        },
       });
     }
-    return _jsonResponse({
-      "data": [
-        {"id": "user-123", "login": "flowtester", "display_name": "Flow Tester"},
-      ],
-    });
-  }
 
-  if (request.url.path == "/helix/streams/followed") {
-    return _jsonResponse({
-      "data": [
-        {
-          "id": "stream-123",
-          "user_id": "creator-1",
-          "user_login": "aussieantics",
-          "user_name": "AussieAntics",
-          "game_name": "Fortnite",
-          "title": "DROPS ON",
-          "viewer_count": 10706,
-          "thumbnail_url":
-              "https://static-cdn.jtvnw.net/previews-ttv/live_user_aussieantics-{width}x{height}.jpg",
+    if (query.contains("FlowFollowedLiveUsers")) {
+      gqlAuthorizationHeaders?["FlowFollowedLiveUsers"] = request.headers["Authorization"];
+      return _jsonResponse({
+        "data": {
+          "currentUser": {
+            "followedLiveUsers": {
+              "edges": [
+                {
+                  "cursor": null,
+                  "node": _userJson("creator-1")
+                    ..["stream"] = _streamJson(
+                      id: "stream-123",
+                      userId: "creator-1",
+                      userLogin: "aussieantics",
+                      userName: "AussieAntics",
+                      gameName: "Fortnite",
+                      title: "DROPS ON",
+                      viewerCount: 10706,
+                    ),
+                },
+              ],
+              "pageInfo": {"hasNextPage": false},
+            },
+          },
         },
-      ],
-    });
-  }
+      });
+    }
 
-  if (request.url.path == "/helix/channels/followed") {
-    return _jsonResponse({
-      "data": [
-        {
-          "broadcaster_id": "creator-2",
-          "broadcaster_login": "novaskye",
-          "broadcaster_name": "NovaSkye",
+    if (query.contains("FlowFollowedUsers")) {
+      gqlAuthorizationHeaders?["FlowFollowedUsers"] = request.headers["Authorization"];
+      return _jsonResponse({
+        "data": {
+          "currentUser": {
+            "follows": {
+              "edges": [
+                {
+                  "cursor": null,
+                  "followedAt": "2026-07-01T00:00:00Z",
+                  "node": _userJson("creator-2"),
+                },
+              ],
+              "pageInfo": {"hasNextPage": false},
+            },
+          },
         },
-      ],
-    });
-  }
+      });
+    }
 
-  if (request.url.path == "/helix/channels") {
-    return _jsonResponse({
-      "data": [
-        {
-          "broadcaster_id": "creator-2",
-          "broadcaster_name": "NovaSkye",
-          "game_name": "VALORANT",
-          "title": "Ranked grind",
+    if (query.contains("FlowUsers")) {
+      gqlAuthorizationHeaders?["FlowUsers"] = request.headers["Authorization"];
+      final ids = (variables["ids"] as List<Object?>?)?.cast<String>() ?? const <String>[];
+      return _jsonResponse({
+        "data": {
+          "users": [
+            for (final id in ids) _userJson(id),
+          ],
         },
-      ],
-    });
+      });
+    }
   }
 
   return http.Response("not found", 404);
 });
+
+String _graphQlQuery(http.Request request) {
+  final body = jsonDecode(request.body) as Map<String, Object?>;
+  return body["query"]! as String;
+}
+
+Map<String, Object?> _graphQlVariables(http.Request request) {
+  final body = jsonDecode(request.body) as Map<String, Object?>;
+  return (body["variables"] as Map<String, Object?>?) ?? const <String, Object?>{};
+}
+
+Map<String, Object?> _userJson(String id) {
+  final login = switch (id) {
+    "user-123" => "flowtester",
+    "creator-1" => "aussieantics",
+    "creator-2" => "novaskye",
+    _ => id,
+  };
+  final displayName = switch (id) {
+    "user-123" => "Flow Tester",
+    "creator-1" => "AussieAntics",
+    "creator-2" => "NovaSkye",
+    _ => id,
+  };
+  return {
+    "id": id,
+    "login": login,
+    "displayName": displayName,
+    "profileImageURL": "https://static-cdn.jtvnw.net/$id.png",
+    "broadcastSettings": id == "creator-2"
+        ? {
+            "title": "Ranked grind",
+            "game": {"id": "516575", "displayName": "VALORANT"},
+          }
+        : null,
+    "stream": null,
+  };
+}
+
+Map<String, Object?> _streamJson({
+  required String id,
+  required String userId,
+  required String userLogin,
+  required String userName,
+  required String gameName,
+  required String title,
+  required int viewerCount,
+}) => {
+  "id": id,
+  "createdAt": "2026-07-01T00:00:00Z",
+  "freeformTags": const <Object?>[],
+  "game": {"id": "33214", "displayName": gameName},
+  "previewImageURL":
+      "https://static-cdn.jtvnw.net/previews-ttv/live_user_$userLogin-{width}x{height}.jpg",
+  "viewersCount": viewerCount,
+  "broadcaster": {
+    "id": userId,
+    "login": userLogin,
+    "displayName": userName,
+    "profileImageURL": "https://static-cdn.jtvnw.net/$userId.png",
+    "broadcastSettings": {"title": title},
+  },
+};
 
 http.Response _jsonResponse(Map<String, Object?> body) => http.Response(
   jsonEncode(body),

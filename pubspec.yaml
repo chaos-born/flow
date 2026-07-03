@@ -12,6 +12,7 @@ dependencies:
         sdk: flutter
     flutter_mobx: ^2.3.0
     flutter_secure_storage: ^10.3.1
+    graphql: ^5.2.4
     http: ^1.6.0
     mobx: ^2.6.0
     shared_preferences: ^2.5.5
@@ -22,11 +23,8 @@ dev_dependencies:
     flutter_lints: ^6.0.0
     flutter_test:
         sdk: flutter
+    graphql_codegen: ^3.0.1
     mobx_codegen: ^2.7.7
 
 flutter:
     uses-material-design: true
-    assets:
-        - lib/graphql/queries/
-        - lib/graphql/mutations/
-        - lib/graphql/fragments/

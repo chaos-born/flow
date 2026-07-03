@@ -58,7 +58,9 @@ class _BrowseScreenState extends State<BrowseScreen> {
   late final TwitchAuthController _authController;
   late final TwitchApiCache _apiCache;
   late final BrowseStore _store;
+  late final BrowseSearchStore _searchStore;
   late final FlowPreferences _preferences;
+  final _categoryStores = <String, CategoryStreamsStore>{};
 
   @override
   void initState() {
@@ -67,6 +69,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
     _apiCache = widget.apiCache ?? TwitchApiCache(clientLoader: _loadApiClient);
     _store = widget.browseStore ?? BrowseStore(apiCache: _apiCache);
     _preferences = widget.preferences ?? _MemoryFlowPreferences();
+    _searchStore = BrowseSearchStore(
+      apiCache: _apiCache,
+      preferences: _preferences,
+    );
     _scrollController = ScrollController(
       initialScrollOffset: _store.scrollOffsetFor(_store.selectedSection),
     );
@@ -129,9 +135,11 @@ class _BrowseScreenState extends State<BrowseScreen> {
       config: config,
       secureStore: const SecureTwitchStore(),
       cookieExtractor: const MethodChannelTwitchCookieExtractor(),
-      apiClientFactory: (accessToken) => TwitchApiClient(
+      apiClientFactory: (accessToken, {gqlAccessToken}) => TwitchApiClient(
         clientId: config.clientId,
+        graphQlClientId: config.graphQlClientId,
         accessToken: accessToken,
+        gqlAccessToken: gqlAccessToken,
       ),
     );
   }
@@ -152,6 +160,13 @@ class _BrowseScreenState extends State<BrowseScreen> {
   Future<void> _refreshActiveSection() => _store.refreshActiveSection();
 
   void _openCategory(BrowseCategory category) {
+    final store = _categoryStores.putIfAbsent(
+      category.id,
+      () => CategoryStreamsStore(
+        apiCache: _apiCache,
+        category: category,
+      ),
+    );
     unawaited(
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
@@ -159,6 +174,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
             authController: _authController,
             apiCache: _apiCache,
             category: category,
+            categoryStreamsStore: store,
           ),
         ),
       ),
@@ -173,6 +189,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
             authController: _authController,
             apiCache: _apiCache,
             preferences: _preferences,
+            searchStore: _searchStore,
           ),
         ),
       ),
@@ -300,6 +317,11 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
           apiCache: widget.apiCache,
           preferences: widget.preferences,
         );
+    if (_store.query.isNotEmpty) {
+      _searchController
+        ..text = _store.query
+        ..selection = TextSelection.collapsed(offset: _store.query.length);
+    }
     unawaited(_store.loadSearchHistory());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -890,11 +912,13 @@ class _CategoryStreamsScreen extends StatefulWidget {
     required this.authController,
     required this.apiCache,
     required this.category,
+    this.categoryStreamsStore,
   });
 
   final TwitchAuthController authController;
   final TwitchApiCache apiCache;
   final BrowseCategory category;
+  final CategoryStreamsStore? categoryStreamsStore;
 
   @override
   State<_CategoryStreamsScreen> createState() => _CategoryStreamsScreenState();
@@ -905,6 +929,12 @@ class _CategoryStreamsScreen extends StatefulWidget {
     properties.add(DiagnosticsProperty<TwitchAuthController>("authController", authController));
     properties.add(DiagnosticsProperty<TwitchApiCache>("apiCache", apiCache));
     properties.add(DiagnosticsProperty<BrowseCategory>("category", category));
+    properties.add(
+      DiagnosticsProperty<CategoryStreamsStore?>(
+        "categoryStreamsStore",
+        categoryStreamsStore,
+      ),
+    );
   }
 }
 
@@ -915,12 +945,16 @@ class _CategoryStreamsScreenState extends State<_CategoryStreamsScreen> {
   @override
   void initState() {
     super.initState();
-    _store = CategoryStreamsStore(
-      apiCache: widget.apiCache,
-      category: widget.category,
-    );
+    _store =
+        widget.categoryStreamsStore ??
+        CategoryStreamsStore(
+          apiCache: widget.apiCache,
+          category: widget.category,
+        );
     _scrollController.addListener(_loadMoreWhenNearBottom);
-    unawaited(_store.loadStreams(reset: true));
+    if (!_store.loaded) {
+      unawaited(_store.loadStreams(reset: true));
+    }
   }
 
   @override
@@ -1109,7 +1143,11 @@ Future<TwitchApiClient> _loadBrowseApiClient(
     throw TwitchAuthException("Connect Twitch from Following to browse live data.");
   }
 
-  return authController.apiClientFactory(accessToken);
+  final gqlAccessToken = await authController.secureStore.readWebSessionToken();
+  return authController.apiClientFactory(
+    accessToken,
+    gqlAccessToken: gqlAccessToken,
+  );
 }
 
 class _BrowseTopBar extends StatelessWidget {

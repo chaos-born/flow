@@ -11,6 +11,64 @@ import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 
 void main() {
+  test("does not fetch top streams when search has no live channel logins", () async {
+    var topStreamsRequests = 0;
+    final cache = TwitchApiCache(
+      clientLoader: () async => TwitchApiClient(
+        clientId: "client-123",
+        accessToken: "token-123",
+        httpClient: MockClient((request) async {
+          if (request.url.host == "gql.twitch.tv") {
+            final query = _graphQlQuery(request);
+            final variables = _graphQlVariables(request);
+            if (query.contains("FlowSearchChannels")) {
+              expect(variables["queryFragment"], "case");
+              return _jsonResponse({
+                "data": {
+                  "searchSuggestions": {
+                    "edges": [
+                      _searchChannelEdge(id: "case-1", displayName: "CaseCreator"),
+                    ],
+                    "tracking": null,
+                  },
+                },
+              });
+            }
+            if (query.contains("FlowSearchCategories")) {
+              return _searchCategoriesResponse(const <Map<String, Object?>>[]);
+            }
+            if (query.contains("FlowUsers")) {
+              final ids = (variables["ids"] as List<Object?>?)?.cast<String>() ?? const <String>[];
+              return _jsonResponse({
+                "data": {
+                  "users": [
+                    for (final id in ids) _userJson(id),
+                  ],
+                },
+              });
+            }
+            if (query.contains("FlowTopStreams")) {
+              topStreamsRequests++;
+              return _topStreamsResponse(const <Map<String, Object?>>[]);
+            }
+          }
+
+          return http.Response("not found", 404);
+        }),
+      ),
+    );
+    final store = BrowseSearchStore(
+      apiCache: cache,
+      preferences: _MemoryFlowPreferences(),
+    );
+
+    await store.search("case");
+
+    expect(topStreamsRequests, 0);
+    expect(store.errorMessage, isNull);
+    expect(store.channels.single.displayName, "CaseCreator");
+  });
+
   test("ignores stale search results from an earlier query", () async {
     final slowSearch = Completer<http.Response>();
     final cache = TwitchApiCache(
@@ -18,35 +76,42 @@ void main() {
         clientId: "client-123",
         accessToken: "token-123",
         httpClient: MockClient((request) async {
-          if (request.url.path == "/helix/search/channels") {
-            if (request.url.queryParameters["query"] == "slow") {
-              return slowSearch.future;
-            }
-            return _jsonResponse({
-              "data": [
-                _searchChannelJson(id: "fast-1", displayName: "FastCreator"),
-              ],
-            });
-          }
-          if (request.url.path == "/helix/search/categories") {
-            return _jsonResponse({"data": <Object?>[]});
-          }
-          if (request.url.path == "/helix/users") {
-            final ids = request.url.queryParametersAll["id"] ?? const <String>[];
-            return _jsonResponse({
-              "data": [
-                for (final id in ids)
-                  {
-                    "id": id,
-                    "login": "fastcreator",
-                    "display_name": "FastCreator",
+          if (request.url.host == "gql.twitch.tv") {
+            final query = _graphQlQuery(request);
+            final variables = _graphQlVariables(request);
+            if (query.contains("FlowSearchChannels")) {
+              if (variables["queryFragment"] == "slow") {
+                return slowSearch.future;
+              }
+              return _jsonResponse({
+                "data": {
+                  "searchSuggestions": {
+                    "edges": [
+                      _searchChannelEdge(id: "fast-1", displayName: "FastCreator"),
+                    ],
+                    "tracking": null,
                   },
-              ],
-            });
+                },
+              });
+            }
+            if (query.contains("FlowSearchCategories")) {
+              return _searchCategoriesResponse(const <Map<String, Object?>>[]);
+            }
+            if (query.contains("FlowUsers")) {
+              final ids = (variables["ids"] as List<Object?>?)?.cast<String>() ?? const <String>[];
+              return _jsonResponse({
+                "data": {
+                  "users": [
+                    for (final id in ids) _userJson(id),
+                  ],
+                },
+              });
+            }
+            if (query.contains("FlowTopStreams") || query.contains("FlowGameStreams")) {
+              return _topStreamsResponse(const <Map<String, Object?>>[]);
+            }
           }
-          if (request.url.path == "/helix/streams") {
-            return _jsonResponse({"data": <Object?>[]});
-          }
+
           return http.Response("not found", 404);
         }),
       ),
@@ -64,9 +129,14 @@ void main() {
 
     slowSearch.complete(
       _jsonResponse({
-        "data": [
-          _searchChannelJson(id: "slow-1", displayName: "SlowCreator"),
-        ],
+        "data": {
+          "searchSuggestions": {
+            "edges": [
+              _searchChannelEdge(id: "slow-1", displayName: "SlowCreator"),
+            ],
+            "tracking": null,
+          },
+        },
       }),
     );
     await slowFuture;
@@ -75,18 +145,74 @@ void main() {
   });
 }
 
-Map<String, Object?> _searchChannelJson({
+String _graphQlQuery(http.Request request) {
+  final body = jsonDecode(request.body) as Map<String, Object?>;
+  return body["query"]! as String;
+}
+
+Map<String, Object?> _graphQlVariables(http.Request request) {
+  final body = jsonDecode(request.body) as Map<String, Object?>;
+  return (body["variables"] as Map<String, Object?>?) ?? const <String, Object?>{};
+}
+
+Map<String, Object?> _searchChannelEdge({
   required String id,
   required String displayName,
+  bool isLive = false,
 }) => {
-  "id": id,
-  "broadcaster_login": displayName.toLowerCase(),
-  "display_name": displayName,
-  "game_name": "Minecraft",
-  "title": "Building",
-  "thumbnail_url": "https://static-cdn.jtvnw.net/$id.png",
-  "is_live": false,
+  "node": {
+    "id": "$id-suggestion",
+    "text": displayName,
+    "content": {
+      "__typename": "SearchSuggestionChannel",
+      "id": id,
+      "isLive": isLive,
+      "isVerified": false,
+      "login": displayName.toLowerCase(),
+      "profileImageURL": "https://static-cdn.jtvnw.net/$id.png",
+      "user": {
+        "id": id,
+        "roles": const <Object?>[],
+        "stream": null,
+      },
+    },
+  },
 };
+
+Map<String, Object?> _userJson(String id) => {
+  "id": id,
+  "login": id == "fast-1" ? "fastcreator" : "slowcreator",
+  "displayName": id == "fast-1" ? "FastCreator" : "SlowCreator",
+  "profileImageURL": "https://static-cdn.jtvnw.net/$id.png",
+  "broadcastSettings": null,
+  "stream": null,
+};
+
+http.Response _searchCategoriesResponse(
+  List<Map<String, Object?>> categories,
+) => _jsonResponse({
+  "data": {
+    "searchCategories": {
+      "edges": [
+        for (final category in categories) {"cursor": null, "node": category},
+      ],
+      "pageInfo": {"hasNextPage": false},
+    },
+  },
+});
+
+http.Response _topStreamsResponse(
+  List<Map<String, Object?>> streams,
+) => _jsonResponse({
+  "data": {
+    "streams": {
+      "edges": [
+        for (final stream in streams) {"cursor": null, "node": stream},
+      ],
+      "pageInfo": {"hasNextPage": false},
+    },
+  },
+});
 
 http.Response _jsonResponse(Map<String, Object?> body) => http.Response(
   jsonEncode(body),

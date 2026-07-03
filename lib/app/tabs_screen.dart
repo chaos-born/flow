@@ -128,9 +128,11 @@ class _FlowTabsScreenState extends State<FlowTabsScreen> {
       config: config,
       secureStore: const SecureTwitchStore(),
       cookieExtractor: const MethodChannelTwitchCookieExtractor(),
-      apiClientFactory: (accessToken) => TwitchApiClient(
+      apiClientFactory: (accessToken, {gqlAccessToken}) => TwitchApiClient(
         clientId: config.clientId,
+        graphQlClientId: config.graphQlClientId,
         accessToken: accessToken,
+        gqlAccessToken: gqlAccessToken,
       ),
     );
   }
@@ -270,7 +272,11 @@ Future<TwitchApiClient> _loadApiClient(TwitchAuthController authController) asyn
     throw TwitchAuthException("Connect Twitch from Following to browse live data.");
   }
 
-  return authController.apiClientFactory(accessToken);
+  final gqlAccessToken = await authController.secureStore.readWebSessionToken();
+  return authController.apiClientFactory(
+    accessToken,
+    gqlAccessToken: gqlAccessToken,
+  );
 }
 
 class _MemoryFlowPreferences implements FlowPreferences {

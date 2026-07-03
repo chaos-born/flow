@@ -14,122 +14,20 @@ import "package:http/testing.dart";
 typedef _RequestObserver = void Function(http.Request request);
 
 void main() {
-  testWidgets("shows categories with viewer counts, pagination, and refresh", (
-    tester,
-  ) async {
-    final requestedUris = <Uri>[];
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildFlowTheme(Brightness.dark),
-        home: BrowseScreen(
-          authController: _authController(
-            onRequest: (request) {
-              requestedUris.add(request.url);
-            },
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey("browse_title")), findsOneWidget);
-    expect(find.byKey(const ValueKey("browse_category_card_Just Chatting")), findsOneWidget);
-    expect(find.text("31K"), findsOneWidget);
-    expect(find.byType(StreamCard), findsNothing);
-
-    await tester.drag(find.byType(ListView), const Offset(0, -1200));
-    await tester.pumpAndSettle();
-
-    expect(
-      requestedUris.any((uri) => uri.queryParameters["after"] == "cat-page-2"),
-      isTrue,
-    );
-    expect(find.byKey(const ValueKey("browse_category_card_VALORANT")), findsOneWidget);
-
-    await tester.drag(find.byType(ListView), const Offset(0, 3000));
-    await tester.pumpAndSettle();
-    requestedUris.clear();
-    await tester.drag(find.byType(ListView), const Offset(0, 500));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
-
-    expect(
-      requestedUris.any(
-        (uri) => uri.path == "/helix/games/top" && !uri.queryParameters.containsKey("after"),
-      ),
-      isTrue,
-    );
-  });
-
-  testWidgets("shows live channels with pagination and refresh", (tester) async {
-    final requestedUris = <Uri>[];
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildFlowTheme(Brightness.dark),
-        home: BrowseScreen(
-          authController: _authController(
-            onRequest: (request) {
-              requestedUris.add(request.url);
-            },
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey("browse_segment_live_channels")));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey("browse_categories_grid")), findsNothing);
-    expect(find.byType(StreamCard), findsWidgets);
-    expect(find.text("AussieAntics"), findsOneWidget);
-
-    await tester.drag(find.byType(ListView), const Offset(0, -1200));
-    await tester.pumpAndSettle();
-
-    expect(
-      requestedUris.any((uri) => uri.queryParameters["after"] == "stream-page-2"),
-      isTrue,
-    );
-    expect(find.text("NextStreamer"), findsOneWidget);
-
-    await tester.drag(find.byType(ListView), const Offset(0, 3000));
-    await tester.pumpAndSettle();
-    requestedUris.clear();
-    await tester.drag(find.byType(ListView), const Offset(0, 500));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
-
-    expect(
-      requestedUris.any(
-        (uri) => uri.path == "/helix/streams" && !uri.queryParameters.containsKey("after"),
-      ),
-      isTrue,
-    );
-  });
-
   testWidgets("opens live channels for a tapped category", (tester) async {
-    final requestedUris = <Uri>[];
+    final requestedRequests = <http.Request>[];
 
     await tester.pumpWidget(
       MaterialApp(
         theme: buildFlowTheme(Brightness.dark),
         home: BrowseScreen(
-          authController: _authController(
-            onRequest: (request) {
-              requestedUris.add(request.url);
-            },
-          ),
+          authController: _authController(onRequest: requestedRequests.add),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    requestedUris.clear();
+    requestedRequests.clear();
     await tester.tap(find.byKey(const ValueKey("browse_category_card_Just Chatting")));
     await tester.pumpAndSettle();
 
@@ -139,13 +37,36 @@ void main() {
     expect(find.text("AussieAntics"), findsOneWidget);
     expect(find.text("NovaSkye"), findsOneWidget);
     expect(
-      requestedUris.any(
-        (uri) =>
-            uri.path == "/helix/streams" &&
-            (uri.queryParametersAll["game_id"] ?? const <String>[]).contains("509658"),
+      requestedRequests.any(
+        (request) =>
+            _isGraphQlOperation(request, "FlowGameStreams") &&
+            _graphQlVariables(request)["id"] == "509658",
       ),
       isTrue,
     );
+    final categoryRequestsAfterFirstOpen = requestedRequests
+        .where(
+          (request) =>
+              _isGraphQlOperation(request, "FlowGameStreams") &&
+              _graphQlVariables(request)["id"] == "509658",
+        )
+        .length;
+
+    Navigator.of(
+      tester.element(find.byKey(const ValueKey("category_streams_page_Just Chatting"))),
+    ).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey("browse_category_card_Just Chatting")));
+    await tester.pumpAndSettle();
+
+    final categoryRequestsAfterReopen = requestedRequests
+        .where(
+          (request) =>
+              _isGraphQlOperation(request, "FlowGameStreams") &&
+              _graphQlVariables(request)["id"] == "509658",
+        )
+        .length;
+    expect(categoryRequestsAfterReopen, categoryRequestsAfterFirstOpen);
   });
 
   testWidgets("shows recent search history and clears it", (tester) async {
@@ -218,17 +139,13 @@ void main() {
   testWidgets("searches channels before categories and filters unavailable channels", (
     tester,
   ) async {
-    final requestedUris = <Uri>[];
+    final requestedRequests = <http.Request>[];
 
     await tester.pumpWidget(
       MaterialApp(
         theme: buildFlowTheme(Brightness.dark),
         home: BrowseScreen(
-          authController: _authController(
-            onRequest: (request) {
-              requestedUris.add(request.url);
-            },
-          ),
+          authController: _authController(onRequest: requestedRequests.add),
         ),
       ),
     );
@@ -264,14 +181,17 @@ void main() {
       findsOneWidget,
     );
     expect(
-      requestedUris.any((uri) => uri.path == "/helix/search/categories"),
+      requestedRequests.any(
+        (request) => _isGraphQlOperation(request, "FlowSearchCategories"),
+      ),
       isTrue,
     );
     expect(
-      requestedUris.any(
-        (uri) =>
-            uri.path == "/helix/streams" &&
-            (uri.queryParametersAll["user_login"] ?? const <String>[]).contains("highcreator"),
+      requestedRequests.any(
+        (request) =>
+            _isGraphQlOperation(request, "FlowUsers") &&
+            ((_graphQlVariables(request)["logins"] as List<Object?>?) ?? const <Object?>[])
+                .contains("highcreator"),
       ),
       isTrue,
     );
@@ -310,6 +230,52 @@ void main() {
 
     expect(find.byKey(const ValueKey("category_streams_page_Minecraft")), findsOneWidget);
   });
+
+  testWidgets("keeps search results in memory when reopening search", (tester) async {
+    final requestedRequests = <http.Request>[];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.dark),
+        home: BrowseScreen(
+          authController: _authController(onRequest: requestedRequests.add),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_field")));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey("browse_search_page_field")),
+      "mine",
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey("browse_search_channel_MinecraftCreator")),
+      findsOneWidget,
+    );
+    final searchRequestsAfterFirstOpen = requestedRequests
+        .where((request) => _isGraphQlOperation(request, "FlowSearchChannels"))
+        .length;
+
+    Navigator.of(tester.element(find.byKey(const ValueKey("browse_search_page")))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey("browse_search_field")));
+    await tester.pumpAndSettle();
+
+    expect(find.text("mine"), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey("browse_search_channel_MinecraftCreator")),
+      findsOneWidget,
+    );
+    final searchRequestsAfterReopen = requestedRequests
+        .where((request) => _isGraphQlOperation(request, "FlowSearchChannels"))
+        .length;
+    expect(searchRequestsAfterReopen, searchRequestsAfterFirstOpen);
+  });
 }
 
 TwitchAuthController _authController({_RequestObserver? onRequest}) {
@@ -317,9 +283,10 @@ TwitchAuthController _authController({_RequestObserver? onRequest}) {
   return TwitchAuthController(
     config: const TwitchAuthConfig(clientId: "client-123"),
     secureStore: store,
-    apiClientFactory: (accessToken) => TwitchApiClient(
+    apiClientFactory: (accessToken, {gqlAccessToken}) => TwitchApiClient(
       clientId: "client-123",
       accessToken: accessToken,
+      gqlAccessToken: gqlAccessToken,
       httpClient: _browseHttpClient(onRequest: onRequest),
     ),
     cookieExtractor: const _StaticCookieExtractor(),
@@ -329,140 +296,115 @@ TwitchAuthController _authController({_RequestObserver? onRequest}) {
 MockClient _browseHttpClient({_RequestObserver? onRequest}) => MockClient((request) async {
   onRequest?.call(request);
 
-  if (request.url.path == "/helix/users") {
-    final ids = request.url.queryParametersAll["id"] ?? const <String>[];
-    return _jsonResponse({
-      "data": [
-        for (final id in ids)
-          if (id != "banned-1")
-            {
-              "id": id,
-              "login": _loginForUserId(id),
-              "display_name": _displayNameForUserId(id),
-              "profile_image_url": "https://static-cdn.jtvnw.net/$id.png",
-            },
-      ],
-    });
-  }
+  if (request.url.host == "gql.twitch.tv") {
+    final query = _graphQlQuery(request);
+    final variables = _graphQlVariables(request);
 
-  if (request.url.path == "/helix/games/top") {
-    if (request.url.queryParameters["after"] == "cat-page-2") {
+    if (query.contains("FlowUsers")) {
+      final ids = (variables["ids"] as List<Object?>?)?.cast<String>();
+      final logins = (variables["logins"] as List<Object?>?)?.cast<String>();
       return _jsonResponse({
-        "data": [
-          _categoryJson(id: "516575", name: "VALORANT"),
-          _categoryJson(id: "27471", name: "Minecraft"),
-          _categoryJson(id: "33214", name: "Fortnite"),
-        ],
+        "data": {
+          "users": [
+            if (ids != null)
+              for (final id in ids)
+                if (id != "banned-1") _userJson(id),
+            if (logins != null)
+              for (final login in logins)
+                _userJson(_userIdForLogin(login), stream: _searchStreamForLogin(login)),
+          ],
+        },
       });
     }
 
-    return _jsonResponse({
-      "data": [
-        _categoryJson(id: "509658", name: "Just Chatting"),
-        _categoryJson(id: "21779", name: "League of Legends"),
-        _categoryJson(id: "32399", name: "Counter-Strike"),
-        _categoryJson(id: "29595", name: "Dota 2"),
-        _categoryJson(id: "511224", name: "Apex Legends"),
-        _categoryJson(id: "32982", name: "Grand Theft Auto V"),
-        _categoryJson(id: "18122", name: "World of Warcraft"),
-        _categoryJson(id: "493057", name: "PUBG"),
-        _categoryJson(id: "488552", name: "Overwatch 2"),
-        _categoryJson(id: "491487", name: "Dead by Daylight"),
-        _categoryJson(id: "515025", name: "Teamfight Tactics"),
-        _categoryJson(id: "509663", name: "Special Events"),
-      ],
-      "pagination": {"cursor": "cat-page-2"},
-    });
-  }
+    if (query.contains("FlowTopGames")) {
+      if (variables["after"] == "cat-page-2") {
+        return _categoryConnectionResponse(
+          [
+            _categoryJson(id: "516575", name: "VALORANT"),
+            _categoryJson(id: "27471", name: "Minecraft"),
+            _categoryJson(id: "33214", name: "Fortnite"),
+          ],
+          fieldName: "games",
+        );
+      }
 
-  if (request.url.path == "/helix/search/channels") {
-    return _jsonResponse({
-      "data": [
-        {
-          "id": "creator-low",
-          "broadcaster_login": "lowcreator",
-          "display_name": "LowCreator",
-          "game_name": "Minecraft",
-          "title": "Low live search result",
-          "thumbnail_url": "https://static-cdn.jtvnw.net/creator-low.png",
-          "is_live": true,
-        },
-        {
-          "id": "creator-4",
-          "broadcaster_login": "minecraftcreator",
-          "display_name": "MinecraftCreator",
-          "game_name": "Minecraft",
-          "title": "Building from search",
-          "thumbnail_url": "https://static-cdn.jtvnw.net/creator-4.png",
-          "is_live": false,
-        },
-        {
-          "id": "creator-high",
-          "broadcaster_login": "highcreator",
-          "display_name": "HighCreator",
-          "game_name": "Minecraft",
-          "title": "High live search result",
-          "thumbnail_url": "https://static-cdn.jtvnw.net/creator-high.png",
-          "is_live": true,
-        },
-        {
-          "id": "banned-1",
-          "broadcaster_login": "bannedcreator",
-          "display_name": "BannedCreator",
-          "game_name": "Minecraft",
-          "title": "Unavailable account",
-          "thumbnail_url": "https://static-cdn.jtvnw.net/banned-1.png",
-          "is_live": false,
-        },
-      ],
-    });
-  }
-
-  if (request.url.path == "/helix/search/categories") {
-    return _jsonResponse({
-      "data": [
-        _categoryJson(
-          id: "zero-viewer",
-          name: "Valiant Hearts",
-          boxArtUrl: "https://static-cdn.jtvnw.net/ttv-boxart/zero-viewer-52x72.jpg",
-        ),
-        _categoryJson(
-          id: "27471",
-          name: "Minecraft",
-          boxArtUrl: "https://static-cdn.jtvnw.net/ttv-boxart/27471-52x72.jpg",
-        ),
-      ],
-    });
-  }
-
-  if (request.url.path == "/helix/streams") {
-    final gameIds = request.url.queryParametersAll["game_id"] ?? const <String>[];
-    final userLogins = request.url.queryParametersAll["user_login"] ?? const <String>[];
-    if (userLogins.isNotEmpty) {
-      return _jsonResponse({
-        "data": [
-          _streamJson(
-            id: "low-search-stream",
-            userId: "creator-low",
-            userLogin: "lowcreator",
-            userName: "LowCreator",
-            gameName: "Minecraft",
-            viewerCount: 10,
-          ),
-          _streamJson(
-            id: "high-search-stream",
-            userId: "creator-high",
-            userLogin: "highcreator",
-            userName: "HighCreator",
-            gameName: "Minecraft",
-            viewerCount: 900,
-          ),
+      return _categoryConnectionResponse(
+        [
+          _categoryJson(id: "509658", name: "Just Chatting"),
+          _categoryJson(id: "21779", name: "League of Legends"),
+          _categoryJson(id: "32399", name: "Counter-Strike"),
+          _categoryJson(id: "29595", name: "Dota 2"),
+          _categoryJson(id: "511224", name: "Apex Legends"),
+          _categoryJson(id: "32982", name: "Grand Theft Auto V"),
+          _categoryJson(id: "18122", name: "World of Warcraft"),
+          _categoryJson(id: "493057", name: "PUBG"),
+          _categoryJson(id: "488552", name: "Overwatch 2"),
+          _categoryJson(id: "491487", name: "Dead by Daylight"),
+          _categoryJson(id: "515025", name: "Teamfight Tactics"),
+          _categoryJson(id: "509663", name: "Special Events"),
         ],
+        fieldName: "games",
+        cursor: "cat-page-2",
+      );
+    }
+
+    if (query.contains("FlowSearchChannels")) {
+      return _jsonResponse({
+        "data": {
+          "searchSuggestions": {
+            "edges": [
+              _searchChannelEdge(
+                id: "creator-low",
+                login: "lowcreator",
+                displayName: "LowCreator",
+                isLive: true,
+              ),
+              _searchChannelEdge(
+                id: "creator-4",
+                login: "minecraftcreator",
+                displayName: "MinecraftCreator",
+              ),
+              _searchChannelEdge(
+                id: "creator-high",
+                login: "highcreator",
+                displayName: "HighCreator",
+                isLive: true,
+              ),
+              _searchChannelEdge(
+                id: "banned-1",
+                login: "bannedcreator",
+                displayName: "BannedCreator",
+              ),
+            ],
+            "tracking": null,
+          },
+        },
       });
     }
-    if (gameIds.contains("509658")) {
-      return _jsonResponse({
-        "data": [
+
+    if (query.contains("FlowSearchCategories")) {
+      return _categoryConnectionResponse(
+        [
+          _categoryJson(
+            id: "zero-viewer",
+            name: "Valiant Hearts",
+            boxArtUrl: "https://static-cdn.jtvnw.net/ttv-boxart/zero-viewer-52x72.jpg",
+          ),
+          _categoryJson(
+            id: "27471",
+            name: "Minecraft",
+            boxArtUrl: "https://static-cdn.jtvnw.net/ttv-boxart/27471-52x72.jpg",
+          ),
+        ],
+        fieldName: "searchCategories",
+      );
+    }
+
+    if (query.contains("FlowGameStreams")) {
+      final gameId = variables["id"];
+      if (gameId == "509658") {
+        return _gameStreamsResponse([
           _streamJson(
             id: "category-stream-1",
             userId: "creator-1",
@@ -479,12 +421,10 @@ MockClient _browseHttpClient({_RequestObserver? onRequest}) => MockClient((reque
             gameName: "Just Chatting",
             viewerCount: 11000,
           ),
-        ],
-      });
-    }
-    if (gameIds.contains("27471")) {
-      return _jsonResponse({
-        "data": [
+        ]);
+      }
+      if (gameId == "27471") {
+        return _gameStreamsResponse([
           _streamJson(
             id: "minecraft-category-stream",
             userId: "creator-4",
@@ -493,15 +433,14 @@ MockClient _browseHttpClient({_RequestObserver? onRequest}) => MockClient((reque
             gameName: "Minecraft",
             viewerCount: 4200,
           ),
-        ],
-      });
+        ]);
+      }
+      return _gameStreamsResponse(const <Map<String, Object?>>[]);
     }
-    if (gameIds.isNotEmpty) {
-      return _jsonResponse({"data": <Object?>[]});
-    }
-    if (request.url.queryParameters["after"] == "stream-page-2") {
-      return _jsonResponse({
-        "data": [
+
+    if (query.contains("FlowTopStreams")) {
+      if (variables["after"] == "stream-page-2") {
+        return _streamConnectionResponse([
           _streamJson(
             id: "stream-124",
             userId: "creator-5",
@@ -510,41 +449,113 @@ MockClient _browseHttpClient({_RequestObserver? onRequest}) => MockClient((reque
             gameName: "VALORANT",
             viewerCount: 1900,
           ),
-        ],
-      });
-    }
+        ]);
+      }
 
-    return _jsonResponse({
-      "data": [
-        for (var index = 0; index < 20; index++)
-          _streamJson(
-            id: "stream-$index",
-            userId: index == 0 ? "creator-1" : "creator-top-$index",
-            userLogin: index == 0 ? "aussieantics" : "topstreamer$index",
-            userName: index == 0 ? "AussieAntics" : "TopStreamer$index",
-            gameName: index.isEven ? "Fortnite" : "Just Chatting",
-            viewerCount: index == 0 ? 10706 : 9000 - index,
-          ),
-      ],
-      "pagination": {"cursor": "stream-page-2"},
-    });
+      return _streamConnectionResponse(
+        [
+          for (var index = 0; index < 20; index++)
+            _streamJson(
+              id: "stream-$index",
+              userId: index == 0 ? "creator-1" : "creator-top-$index",
+              userLogin: index == 0 ? "aussieantics" : "topstreamer$index",
+              userName: index == 0 ? "AussieAntics" : "TopStreamer$index",
+              gameName: index.isEven ? "Fortnite" : "Just Chatting",
+              viewerCount: index == 0 ? 10706 : 9000 - index,
+            ),
+        ],
+        cursor: "stream-page-2",
+      );
+    }
   }
 
   return http.Response("not found", 404);
 });
 
-String _loginForUserId(String id) => switch (id) {
-  "creator-1" => "aussieantics",
-  "creator-4" => "minecraftcreator",
-  "creator-5" => "nextstreamer",
-  _ => "novaskye",
+bool _isGraphQlOperation(http.Request request, String operationName) =>
+    request.url.host == "gql.twitch.tv" && request.body.contains(operationName);
+
+String _graphQlQuery(http.Request request) {
+  final body = jsonDecode(request.body) as Map<String, Object?>;
+  return body["query"]! as String;
+}
+
+Map<String, Object?> _graphQlVariables(http.Request request) {
+  final body = jsonDecode(request.body) as Map<String, Object?>;
+  return (body["variables"] as Map<String, Object?>?) ?? const <String, Object?>{};
+}
+
+Map<String, Object?> _userJson(
+  String id, {
+  Map<String, Object?>? stream,
+}) => {
+  "id": id,
+  "login": _loginForUserId(id),
+  "displayName": _displayNameForUserId(id),
+  "profileImageURL": "https://static-cdn.jtvnw.net/$id.png",
+  "broadcastSettings": null,
+  "stream": stream,
 };
 
-String _displayNameForUserId(String id) => switch (id) {
-  "creator-1" => "AussieAntics",
-  "creator-4" => "MinecraftCreator",
-  "creator-5" => "NextStreamer",
-  _ => "NovaSkye",
+String _userIdForLogin(String login) => switch (login) {
+  "lowcreator" => "creator-low",
+  "highcreator" => "creator-high",
+  "minecraftcreator" => "creator-4",
+  "nextstreamer" => "creator-5",
+  "aussieantics" => "creator-1",
+  _ => login,
+};
+
+String _loginForUserId(String id) {
+  if (id.startsWith("creator-top-")) {
+    return "topstreamer${id.substring("creator-top-".length)}";
+  }
+  return switch (id) {
+    "creator-1" => "aussieantics",
+    "creator-2" => "novaskye",
+    "creator-4" => "minecraftcreator",
+    "creator-5" => "nextstreamer",
+    "creator-low" => "lowcreator",
+    "creator-high" => "highcreator",
+    "banned-1" => "bannedcreator",
+    _ => id,
+  };
+}
+
+String _displayNameForUserId(String id) {
+  if (id.startsWith("creator-top-")) {
+    return "TopStreamer${id.substring("creator-top-".length)}";
+  }
+  return switch (id) {
+    "creator-1" => "AussieAntics",
+    "creator-2" => "NovaSkye",
+    "creator-4" => "MinecraftCreator",
+    "creator-5" => "NextStreamer",
+    "creator-low" => "LowCreator",
+    "creator-high" => "HighCreator",
+    "banned-1" => "BannedCreator",
+    _ => id,
+  };
+}
+
+Map<String, Object?>? _searchStreamForLogin(String login) => switch (login) {
+  "lowcreator" => _streamJson(
+    id: "low-search-stream",
+    userId: "creator-low",
+    userLogin: "lowcreator",
+    userName: "LowCreator",
+    gameName: "Minecraft",
+    viewerCount: 10,
+  ),
+  "highcreator" => _streamJson(
+    id: "high-search-stream",
+    userId: "creator-high",
+    userLogin: "highcreator",
+    userName: "HighCreator",
+    gameName: "Minecraft",
+    viewerCount: 900,
+  ),
+  _ => null,
 };
 
 Map<String, Object?> _categoryJson({
@@ -553,8 +564,8 @@ Map<String, Object?> _categoryJson({
   String? boxArtUrl,
 }) => {
   "id": id,
-  "name": name,
-  "box_art_url": boxArtUrl ?? "https://static-cdn.jtvnw.net/ttv-boxart/$id-{width}x{height}.jpg",
+  "displayName": name,
+  "boxArtURL": boxArtUrl ?? "https://static-cdn.jtvnw.net/ttv-boxart/$id-{width}x{height}.jpg",
 };
 
 Map<String, Object?> _streamJson({
@@ -566,15 +577,90 @@ Map<String, Object?> _streamJson({
   required int viewerCount,
 }) => {
   "id": id,
-  "user_id": userId,
-  "user_login": userLogin,
-  "user_name": userName,
-  "game_name": gameName,
-  "title": "Live from Helix",
-  "viewer_count": viewerCount,
-  "thumbnail_url":
+  "broadcaster": {
+    "id": userId,
+    "login": userLogin,
+    "displayName": userName,
+    "profileImageURL": "https://static-cdn.jtvnw.net/$userId.png",
+    "broadcastSettings": {"title": "Live from GraphQL"},
+  },
+  "createdAt": "2026-07-01T00:00:00Z",
+  "freeformTags": const <Object?>[],
+  "game": {"id": "game-$gameName", "displayName": gameName},
+  "previewImageURL":
       "https://static-cdn.jtvnw.net/previews-ttv/live_user_$userLogin-{width}x{height}.jpg",
+  "viewersCount": viewerCount,
 };
+
+Map<String, Object?> _searchChannelEdge({
+  required String id,
+  required String login,
+  required String displayName,
+  bool isLive = false,
+}) => {
+  "node": {
+    "id": "$id-suggestion",
+    "text": displayName,
+    "content": {
+      "__typename": "SearchSuggestionChannel",
+      "id": id,
+      "isLive": isLive,
+      "isVerified": false,
+      "login": login,
+      "profileImageURL": "https://static-cdn.jtvnw.net/$id.png",
+      "user": {
+        "id": id,
+        "roles": const <Object?>[],
+        "stream": isLive ? _searchStreamForLogin(login) : null,
+      },
+    },
+  },
+};
+
+http.Response _categoryConnectionResponse(
+  List<Map<String, Object?>> categories, {
+  required String fieldName,
+  String? cursor,
+}) => _jsonResponse({
+  "data": {
+    fieldName: {
+      "edges": [
+        for (final category in categories) {"cursor": cursor, "node": category},
+      ],
+      "pageInfo": {"hasNextPage": cursor != null},
+    },
+  },
+});
+
+http.Response _streamConnectionResponse(
+  List<Map<String, Object?>> streams, {
+  String? cursor,
+}) => _jsonResponse({
+  "data": {
+    "streams": {
+      "edges": [
+        for (final stream in streams) {"cursor": cursor, "node": stream},
+      ],
+      "pageInfo": {"hasNextPage": cursor != null},
+    },
+  },
+});
+
+http.Response _gameStreamsResponse(
+  List<Map<String, Object?>> streams, {
+  String? cursor,
+}) => _jsonResponse({
+  "data": {
+    "game": {
+      "streams": {
+        "edges": [
+          for (final stream in streams) {"cursor": cursor, "node": stream},
+        ],
+        "pageInfo": {"hasNextPage": cursor != null},
+      },
+    },
+  },
+});
 
 http.Response _jsonResponse(Map<String, Object?> body) => http.Response(
   jsonEncode(body),

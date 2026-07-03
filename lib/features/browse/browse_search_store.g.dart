@@ -9,6 +9,24 @@ part of 'browse_search_store.dart';
 // ignore_for_file: non_constant_identifier_names, unnecessary_brace_in_string_interps, unnecessary_lambdas, prefer_expression_function_bodies, lines_longer_than_80_chars, avoid_as, avoid_annotating_with_dynamic, no_leading_underscores_for_local_identifiers
 
 mixin _$BrowseSearchStore on BrowseSearchStoreBase, Store {
+  late final _$queryAtom = Atom(
+    name: 'BrowseSearchStoreBase.query',
+    context: context,
+  );
+
+  @override
+  String get query {
+    _$queryAtom.reportRead();
+    return super.query;
+  }
+
+  @override
+  set query(String value) {
+    _$queryAtom.reportWrite(value, super.query, () {
+      super.query = value;
+    });
+  }
+
   late final _$channelsAtom = Atom(
     name: 'BrowseSearchStoreBase.channels',
     context: context,
@@ -163,6 +181,7 @@ mixin _$BrowseSearchStore on BrowseSearchStoreBase, Store {
   @override
   String toString() {
     return '''
+query: ${query},
 channels: ${channels},
 categories: ${categories},
 searchHistory: ${searchHistory},

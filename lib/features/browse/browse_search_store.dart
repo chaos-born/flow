@@ -20,6 +20,9 @@ abstract class BrowseSearchStoreBase with Store {
   int _searchGeneration = 0;
 
   @observable
+  String query = "";
+
+  @observable
   List<TwitchSearchChannel> channels = const <TwitchSearchChannel>[];
 
   @observable
@@ -46,6 +49,7 @@ abstract class BrowseSearchStoreBase with Store {
   @action
   void clearSearch() {
     _searchGeneration++;
+    query = "";
     channels = const <TwitchSearchChannel>[];
     categories = const <BrowseCategory>[];
     isSearching = false;
@@ -75,6 +79,7 @@ abstract class BrowseSearchStoreBase with Store {
       return;
     }
 
+    this.query = normalizedQuery;
     isSearching = true;
     errorMessage = null;
 
@@ -84,17 +89,24 @@ abstract class BrowseSearchStoreBase with Store {
       final validUsersById = await apiCache.fetchUsersByIds([
         for (final channel in channelPage.data) channel.id,
       ]);
-      final liveSearchStreams = await apiCache.fetchLiveStreamsPage(
-        first: 100,
-        userLogins: [
-          for (final channel in channelPage.data)
-            if (channel.isLive && validUsersById.containsKey(channel.id)) channel.broadcasterLogin,
-        ],
-      );
-      final liveViewerCountsByLogin = {
-        for (final stream in liveSearchStreams.data)
-          stream.userLogin.toLowerCase(): stream.viewerCount,
-      };
+      final liveChannelLogins = [
+        for (final channel in channelPage.data)
+          if (channel.isLive && validUsersById.containsKey(channel.id)) channel.broadcasterLogin,
+      ];
+      final liveViewerCountsByLogin = <String, int>{};
+      if (liveChannelLogins.isNotEmpty) {
+        final liveSearchStreams = await apiCache.fetchLiveStreamsPage(
+          userLogins: liveChannelLogins,
+        );
+        liveViewerCountsByLogin.addEntries(
+          liveSearchStreams.data.map(
+            (stream) => MapEntry(
+              stream.userLogin.toLowerCase(),
+              stream.viewerCount,
+            ),
+          ),
+        );
+      }
       final nextChannels =
           [
             for (final channel in channelPage.data)

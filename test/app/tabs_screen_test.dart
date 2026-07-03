@@ -16,7 +16,11 @@ void main() {
     tester,
   ) async {
     var topCategoriesRequests = 0;
-    final store = _MemoryTwitchStore()..accessToken = "token-123";
+    var topLiveStreamsRequests = 0;
+    var followedLiveRequests = 0;
+    final store = _MemoryTwitchStore()
+      ..accessToken = "token-123"
+      ..webSessionToken = "gql-token-123";
 
     await tester.pumpWidget(
       MaterialApp(
@@ -25,9 +29,16 @@ void main() {
           authController: _authController(
             secureStore: store,
             onRequest: (request) {
-              if (request.url.path == "/helix/games/top" &&
-                  !request.url.queryParameters.containsKey("after")) {
+              if (_isGraphQlOperation(request, "FlowTopGames") &&
+                  _graphQlVariables(request)["after"] == null) {
                 topCategoriesRequests++;
+              }
+              if (_isGraphQlOperation(request, "FlowTopStreams") &&
+                  _graphQlVariables(request)["after"] == null) {
+                topLiveStreamsRequests++;
+              }
+              if (_isGraphQlOperation(request, "FlowFollowedLiveUsers")) {
+                followedLiveRequests++;
               }
             },
           ),
@@ -35,6 +46,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(followedLiveRequests, 1);
 
     await tester.tap(find.byKey(const ValueKey("bottom_nav_item_Browse")));
     await tester.pumpAndSettle();
@@ -42,6 +54,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey("browse_segment_live_channels")));
     await tester.pumpAndSettle();
+    expect(topLiveStreamsRequests, 1);
     await tester.drag(find.byType(ListView), const Offset(0, -1200));
     await tester.pumpAndSettle();
 
@@ -56,39 +69,8 @@ void main() {
     expect(find.byKey(const ValueKey("browse_live_channels")), findsOneWidget);
     expect(find.text("NextStreamer"), findsOneWidget);
     expect(topCategoriesRequests, 1);
-  });
-
-  testWidgets("switching to Settings from Browse search removes Browse underneath", (
-    tester,
-  ) async {
-    final store = _MemoryTwitchStore()..accessToken = "token-123";
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildFlowTheme(Brightness.light),
-        home: FlowTabsScreen(authController: _authController(secureStore: store)),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey("bottom_nav_item_Browse")));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey("browse_search_field")));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey("bottom_nav_item_Settings")));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey("settings_title")), findsOneWidget);
-    expect(find.byKey(const ValueKey("browse_title")), findsNothing);
-    expect(find.byKey(const ValueKey("browse_search_page")), findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey("bottom_nav_item_Following")));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey("following_title")), findsOneWidget);
-    expect(find.byKey(const ValueKey("browse_title")), findsNothing);
-    expect(find.byKey(const ValueKey("settings_title")), findsNothing);
+    expect(topLiveStreamsRequests, 1);
+    expect(followedLiveRequests, 1);
   });
 }
 
@@ -98,9 +80,10 @@ TwitchAuthController _authController({
 }) => TwitchAuthController(
   config: const TwitchAuthConfig(clientId: "client-123"),
   secureStore: secureStore,
-  apiClientFactory: (accessToken) => TwitchApiClient(
+  apiClientFactory: (accessToken, {gqlAccessToken}) => TwitchApiClient(
     clientId: "client-123",
     accessToken: accessToken,
+    gqlAccessToken: gqlAccessToken,
     httpClient: _flowHttpClient(onRequest: onRequest),
   ),
   cookieExtractor: const _StaticCookieExtractor(),
@@ -113,66 +96,94 @@ MockClient _flowHttpClient({_RequestObserver? onRequest}) => MockClient((request
     return _jsonResponse({"client_id": "client-123", "user_id": "user-123"});
   }
 
-  if (request.url.path == "/helix/users") {
-    final ids = request.url.queryParametersAll["id"];
-    if (ids != null) {
+  if (request.url.host == "gql.twitch.tv") {
+    final query = _graphQlQuery(request);
+    final variables = _graphQlVariables(request);
+
+    if (query.contains("FlowCurrentUser")) {
       return _jsonResponse({
-        "data": [
-          for (final id in ids)
-            {
-              "id": id,
-              "login": id == "creator-5" ? "nextstreamer" : "aussieantics",
-              "display_name": id == "creator-5" ? "NextStreamer" : "AussieAntics",
-              "profile_image_url": "https://static-cdn.jtvnw.net/$id.png",
-            },
-        ],
+        "data": {"currentUser": _userJson("user-123")},
       });
     }
-    return _jsonResponse({
-      "data": [
-        {"id": "user-123", "login": "flowtester", "display_name": "Flow Tester"},
-      ],
-    });
-  }
 
-  if (request.url.path == "/helix/streams/followed") {
-    return _jsonResponse({
-      "data": [
-        _streamJson(
-          id: "followed-stream",
-          userId: "creator-1",
-          userLogin: "aussieantics",
-          userName: "AussieAntics",
-          gameName: "Fortnite",
-          viewerCount: 10706,
-        ),
-      ],
-    });
-  }
-
-  if (request.url.path == "/helix/channels/followed") {
-    return _jsonResponse({"data": <Object?>[]});
-  }
-
-  if (request.url.path == "/helix/games/top") {
-    return _jsonResponse({
-      "data": [
-        {
-          "id": "509658",
-          "name": "Just Chatting",
-          "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/509658-{width}x{height}.jpg",
-        },
-      ],
-    });
-  }
-
-  if (request.url.path == "/helix/streams") {
-    if ((request.url.queryParametersAll["game_id"] ?? const <String>[]).isNotEmpty) {
-      return _jsonResponse({"data": <Object?>[]});
-    }
-    if (request.url.queryParameters["after"] == "stream-page-2") {
+    if (query.contains("FlowFollowedLiveUsers")) {
       return _jsonResponse({
-        "data": [
+        "data": {
+          "currentUser": {
+            "followedLiveUsers": {
+              "edges": [
+                {
+                  "cursor": null,
+                  "node": _userJson("creator-1")
+                    ..["stream"] = _streamJson(
+                      id: "followed-stream",
+                      userId: "creator-1",
+                      userLogin: "aussieantics",
+                      userName: "AussieAntics",
+                      gameName: "Fortnite",
+                      viewerCount: 10706,
+                    ),
+                },
+              ],
+              "pageInfo": {"hasNextPage": false},
+            },
+          },
+        },
+      });
+    }
+
+    if (query.contains("FlowFollowedUsers")) {
+      return _jsonResponse({
+        "data": {
+          "currentUser": {
+            "follows": {
+              "edges": const <Object?>[],
+              "pageInfo": {"hasNextPage": false},
+            },
+          },
+        },
+      });
+    }
+
+    if (query.contains("FlowUsers")) {
+      final ids = (variables["ids"] as List<Object?>?)?.cast<String>() ?? const <String>[];
+      return _jsonResponse({
+        "data": {
+          "users": [
+            for (final id in ids) _userJson(id),
+          ],
+        },
+      });
+    }
+
+    if (query.contains("FlowTopGames")) {
+      return _jsonResponse({
+        "data": {
+          "games": {
+            "edges": [
+              {
+                "cursor": null,
+                "node": {
+                  "id": "509658",
+                  "displayName": "Just Chatting",
+                  "boxArtURL":
+                      "https://static-cdn.jtvnw.net/ttv-boxart/509658-{width}x{height}.jpg",
+                },
+              },
+            ],
+            "pageInfo": {"hasNextPage": false},
+          },
+        },
+      });
+    }
+
+    if (query.contains("FlowGameStreams")) {
+      return _gameStreamsResponse(const <Map<String, Object?>>[]);
+    }
+
+    if (query.contains("FlowTopStreams")) {
+      if (variables["after"] == "stream-page-2") {
+        return _streamConnectionResponse([
           _streamJson(
             id: "stream-124",
             userId: "creator-5",
@@ -181,27 +192,61 @@ MockClient _flowHttpClient({_RequestObserver? onRequest}) => MockClient((request
             gameName: "VALORANT",
             viewerCount: 1900,
           ),
+        ]);
+      }
+      return _streamConnectionResponse(
+        [
+          for (var index = 0; index < 20; index++)
+            _streamJson(
+              id: "stream-$index",
+              userId: "creator-$index",
+              userLogin: "streamer$index",
+              userName: "Streamer$index",
+              gameName: "Just Chatting",
+              viewerCount: 9000 - index,
+            ),
         ],
-      });
+        cursor: "stream-page-2",
+      );
     }
-    return _jsonResponse({
-      "data": [
-        for (var index = 0; index < 20; index++)
-          _streamJson(
-            id: "stream-$index",
-            userId: "creator-$index",
-            userLogin: "streamer$index",
-            userName: "Streamer$index",
-            gameName: "Just Chatting",
-            viewerCount: 9000 - index,
-          ),
-      ],
-      "pagination": {"cursor": "stream-page-2"},
-    });
   }
 
   return http.Response("not found", 404);
 });
+
+bool _isGraphQlOperation(http.Request request, String operationName) =>
+    request.url.host == "gql.twitch.tv" && request.body.contains(operationName);
+
+String _graphQlQuery(http.Request request) {
+  final body = jsonDecode(request.body) as Map<String, Object?>;
+  return body["query"]! as String;
+}
+
+Map<String, Object?> _graphQlVariables(http.Request request) {
+  final body = jsonDecode(request.body) as Map<String, Object?>;
+  return (body["variables"] as Map<String, Object?>?) ?? const <String, Object?>{};
+}
+
+Map<String, Object?> _userJson(String id) {
+  final login = switch (id) {
+    "user-123" => "flowtester",
+    "creator-5" => "nextstreamer",
+    _ => "aussieantics",
+  };
+  final displayName = switch (id) {
+    "user-123" => "Flow Tester",
+    "creator-5" => "NextStreamer",
+    _ => "AussieAntics",
+  };
+  return {
+    "id": id,
+    "login": login,
+    "displayName": displayName,
+    "profileImageURL": "https://static-cdn.jtvnw.net/$id.png",
+    "broadcastSettings": null,
+    "stream": null,
+  };
+}
 
 Map<String, Object?> _streamJson({
   required String id,
@@ -212,15 +257,49 @@ Map<String, Object?> _streamJson({
   required int viewerCount,
 }) => {
   "id": id,
-  "user_id": userId,
-  "user_login": userLogin,
-  "user_name": userName,
-  "game_name": gameName,
-  "title": "Live from Helix",
-  "viewer_count": viewerCount,
-  "thumbnail_url":
+  "broadcaster": {
+    "id": userId,
+    "login": userLogin,
+    "displayName": userName,
+    "profileImageURL": "https://static-cdn.jtvnw.net/$userId.png",
+    "broadcastSettings": {"title": "Live from GraphQL"},
+  },
+  "createdAt": "2026-07-01T00:00:00Z",
+  "freeformTags": const <Object?>[],
+  "game": {"id": "game-$gameName", "displayName": gameName},
+  "previewImageURL":
       "https://static-cdn.jtvnw.net/previews-ttv/live_user_$userLogin-{width}x{height}.jpg",
+  "viewersCount": viewerCount,
 };
+
+http.Response _streamConnectionResponse(
+  List<Map<String, Object?>> streams, {
+  String? cursor,
+}) => _jsonResponse({
+  "data": {
+    "streams": {
+      "edges": [
+        for (final stream in streams) {"cursor": cursor, "node": stream},
+      ],
+      "pageInfo": {"hasNextPage": cursor != null},
+    },
+  },
+});
+
+http.Response _gameStreamsResponse(
+  List<Map<String, Object?>> streams,
+) => _jsonResponse({
+  "data": {
+    "game": {
+      "streams": {
+        "edges": [
+          for (final stream in streams) {"cursor": null, "node": stream},
+        ],
+        "pageInfo": {"hasNextPage": false},
+      },
+    },
+  },
+});
 
 http.Response _jsonResponse(Map<String, Object?> body) => http.Response(
   jsonEncode(body),

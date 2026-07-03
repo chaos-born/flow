@@ -28,15 +28,7 @@ void main() {
     expect(requests, 1);
 
     response.complete(
-      _jsonResponse({
-        "data": [
-          {
-            "id": "509658",
-            "name": "Just Chatting",
-            "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/509658-{width}x{height}.jpg",
-          },
-        ],
-      }),
+      _topGamesResponse(id: "509658", name: "Just Chatting"),
     );
 
     expect((await first).data.single.name, "Just Chatting");
@@ -55,16 +47,7 @@ void main() {
       accessToken: "token-123",
       httpClient: MockClient((_) async {
         requests++;
-        return _jsonResponse({
-          "data": [
-            {
-              "id": "$requests",
-              "name": "Category $requests",
-              "box_art_url":
-                  "https://static-cdn.jtvnw.net/ttv-boxart/$requests-{width}x{height}.jpg",
-            },
-          ],
-        });
+        return _topGamesResponse(id: "$requests", name: "Category $requests");
       }),
     );
     final cache = TwitchApiCache(clientLoader: () async => client);
@@ -86,16 +69,7 @@ void main() {
         if (requests == 1) {
           return firstResponse.future;
         }
-        return _jsonResponse({
-          "data": [
-            {
-              "id": "$requests",
-              "name": "Category $requests",
-              "box_art_url":
-                  "https://static-cdn.jtvnw.net/ttv-boxart/$requests-{width}x{height}.jpg",
-            },
-          ],
-        });
+        return _topGamesResponse(id: "$requests", name: "Category $requests");
       }),
     );
     final cache = TwitchApiCache(clientLoader: () async => client);
@@ -104,15 +78,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     cache.clear();
     firstResponse.complete(
-      _jsonResponse({
-        "data": [
-          {
-            "id": "1",
-            "name": "Category 1",
-            "box_art_url": "https://static-cdn.jtvnw.net/ttv-boxart/1-{width}x{height}.jpg",
-          },
-        ],
-      }),
+      _topGamesResponse(id: "1", name: "Category 1"),
     );
 
     expect((await first).data.single.name, "Category 1");
@@ -126,3 +92,24 @@ http.Response _jsonResponse(Map<String, Object?> body) => http.Response(
   200,
   headers: {"content-type": "application/json"},
 );
+
+http.Response _topGamesResponse({
+  required String id,
+  required String name,
+}) => _jsonResponse({
+  "data": {
+    "games": {
+      "edges": [
+        {
+          "cursor": null,
+          "node": {
+            "id": id,
+            "displayName": name,
+            "boxArtURL": "https://static-cdn.jtvnw.net/ttv-boxart/$id-{width}x{height}.jpg",
+          },
+        },
+      ],
+      "pageInfo": {"hasNextPage": false},
+    },
+  },
+});
