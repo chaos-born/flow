@@ -1,0 +1,5 @@
+query CreatorWalletPromoEligibility ($channelID: ID!) {
+  hasSpendableBalanceVideoBannerPromoEligibility(channelID: $channelID) {
+    isEligible
+  }
+}

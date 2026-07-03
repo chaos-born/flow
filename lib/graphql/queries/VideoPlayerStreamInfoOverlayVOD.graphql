@@ -1,0 +1,19 @@
+query VideoPlayerStreamInfoOverlayVOD ($videoID: ID) {
+  video(id: $videoID) {
+    id
+    title
+    owner {
+      id
+      login
+      displayName
+      profileImageURL(width: 150)
+      roles {
+        isPartner
+      }
+    }
+    contentTags {
+      id
+      localizedName
+    }
+  }
+}

@@ -1,0 +1,14 @@
+#import "../fragments/CostreamingDiscoveryDetails.graphql"
+
+query CostreamingDiscoveryContextQuery ($channelIDs: [ID!]!) {
+  users(ids: $channelIDs) {
+    id
+    login
+    stream {
+      id
+      costreamDetails {
+        ...CostreamingDiscoveryDetails
+      }
+    }
+  }
+}

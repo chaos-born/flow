@@ -1,0 +1,12 @@
+#import "./HypeTrainLevel.graphql"
+
+fragment HypeTrainProgress on HypeTrainProgress {
+  id
+  level {
+    ...HypeTrainLevel
+  }
+  goal
+  progression
+  total
+  allTimeHighState
+}

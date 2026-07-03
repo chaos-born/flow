@@ -1,0 +1,7 @@
+#import "../fragments/NotificationCampaignFragment.graphql"
+
+query NotificationCampaignsQuery ($args: UserNotificationCampaignInput!) {
+  userNotificationCampaigns(input: $args) {
+    ...NotificationCampaignFragment
+  }
+}

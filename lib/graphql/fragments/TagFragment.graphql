@@ -1,0 +1,6 @@
+fragment TagFragment on Tag {
+  id
+  isLanguageTag
+  localizedName
+  tagName
+}

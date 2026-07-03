@@ -1,0 +1,14 @@
+fragment ChannelGoalFragment on ChannelGoal {
+  id
+  contributionType
+  state
+  currentContributions
+  targetContributions
+  description
+  createdAt
+  customizations {
+    progressBarAccentColor
+    progressBarBackgroundColor
+  }
+  shouldAutoIncrement
+}

@@ -1,0 +1,7 @@
+mutation incrementClipViewCount ($input: UpdateClipViewCountInput!) {
+  updateClipViewCount(input: $input) {
+    clip {
+      id
+    }
+  }
+}

@@ -1,0 +1,5 @@
+mutation OnsiteNotifications_MarkAllCreatorNotificationsAsRead ($input: MarkAllCreatorNotificationsAsReadInput!) {
+  markAllCreatorNotificationsAsRead(input: $input) {
+    hasSucceeded
+  }
+}

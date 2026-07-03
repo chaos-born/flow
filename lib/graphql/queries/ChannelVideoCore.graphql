@@ -1,0 +1,10 @@
+#import "../fragments/CoreChannelFragment.graphql"
+
+query ChannelVideoCore ($videoID: ID!) {
+  video(id: $videoID) {
+    id
+    owner {
+      ...CoreChannelFragment
+    }
+  }
+}

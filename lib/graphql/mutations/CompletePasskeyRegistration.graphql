@@ -1,0 +1,8 @@
+mutation CompletePasskeyRegistration ($input: CompletePasskeyRegistrationInput!) {
+  completePasskeyRegistration(input: $input) {
+    credentialID
+    error {
+      code
+    }
+  }
+}

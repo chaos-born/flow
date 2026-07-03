@@ -1,0 +1,11 @@
+query VideoPlayerSubscriberVODOverlayVideoQuery ($videoID: ID!) {
+  video(id: $videoID) {
+    id
+    owner {
+      id
+      displayName
+      profileImageURL(width: 150)
+      login
+    }
+  }
+}

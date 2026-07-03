@@ -1,0 +1,11 @@
+#import "./GuestStarOngoingSession.graphql"
+
+fragment GuestStarChannelCollab on GuestStarChannelCollaboration {
+  id
+  session {
+    ...GuestStarOngoingSession
+  }
+  canDropIn @include(if: $canDropInFlagEnabled)
+  canJoinStatus @include(if: $openCallingFlagEnabled)
+  isFavorite
+}

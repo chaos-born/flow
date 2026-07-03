@@ -1,0 +1,11 @@
+fragment ActivityFeedEmote on Emote {
+  id
+  token
+  setID
+  modifiers {
+    code
+    name
+  }
+  type
+  assetType
+}

@@ -1,0 +1,13 @@
+query CoreActionsCurrentUser {
+  currentUser {
+    displayName
+    id
+    login
+    roles {
+      isStaff
+    }
+    settings {
+      preferredLanguageTag
+    }
+  }
+}

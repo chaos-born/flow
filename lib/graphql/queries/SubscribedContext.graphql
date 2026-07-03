@@ -1,0 +1,10 @@
+query SubscribedContext ($id: ID, $login: String) {
+  user(id: $id, login: $login) {
+    id
+    self {
+      subscriptionBenefit {
+        id
+      }
+    }
+  }
+}

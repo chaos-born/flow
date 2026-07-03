@@ -1,0 +1,13 @@
+#import "../fragments/ContentClassificationLabelPoliciesFields.graphql"
+
+query ContentClassificationContextStreamPubsub ($channelID: ID) {
+  user(id: $channelID) {
+    id
+    stream {
+      id
+      contentClassificationLabelPolicyProperties {
+        ...ContentClassificationLabelPoliciesFields
+      }
+    }
+  }
+}

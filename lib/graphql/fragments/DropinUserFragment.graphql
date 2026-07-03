@@ -1,0 +1,6 @@
+fragment DropinUserFragment on User {
+  id
+  login
+  displayName
+  profileImageURL(width: 70)
+}

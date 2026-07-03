@@ -1,0 +1,6 @@
+query Core_Services_Spade_Video ($id: ID!) {
+  video(id: $id) {
+    id
+    broadcastType
+  }
+}

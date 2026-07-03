@@ -1,0 +1,4 @@
+fragment BroadcasterInfo on User {
+  id
+  displayName
+}

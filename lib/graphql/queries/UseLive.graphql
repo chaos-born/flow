@@ -1,0 +1,10 @@
+query UseLive ($channelLogin: String!) {
+  user(login: $channelLogin) {
+    id
+    login
+    stream {
+      id
+      createdAt
+    }
+  }
+}

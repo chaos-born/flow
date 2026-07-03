@@ -1,0 +1,14 @@
+query BatchGetWatchStreaks {
+  batchGetWatchStreaks {
+    channel {
+      id
+      stream {
+        id
+        createdAt
+      }
+    }
+    value
+    achievedAt
+    isSuspended
+  }
+}

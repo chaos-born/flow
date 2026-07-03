@@ -1,0 +1,4 @@
+fragment HypeTrainApproachingEventsRemaining on HypeTrainApproachingEventsRemaining {
+  events
+  secondsRemaining
+}

@@ -1,0 +1,8 @@
+mutation placeOrder ($input: PlaceOrderInput!) {
+  placeOrder(input: $input) {
+    orderInformation
+    error {
+      code
+    }
+  }
+}

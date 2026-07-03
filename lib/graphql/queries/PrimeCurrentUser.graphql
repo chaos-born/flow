@@ -1,0 +1,6 @@
+query Prime_Current_User {
+  currentUser {
+    id
+    hasPrime
+  }
+}

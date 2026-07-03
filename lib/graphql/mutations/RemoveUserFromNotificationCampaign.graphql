@@ -1,0 +1,5 @@
+mutation RemoveUserFromNotificationCampaign ($input: RemoveUserFromNotificationCampaignInput!) {
+  removeUserFromNotificationCampaign(input: $input) {
+    campaignID
+  }
+}

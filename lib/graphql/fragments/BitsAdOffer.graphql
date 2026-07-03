@@ -1,0 +1,5 @@
+fragment BitsAdOffer on BitsAdOffer {
+  id
+  type
+  bits
+}

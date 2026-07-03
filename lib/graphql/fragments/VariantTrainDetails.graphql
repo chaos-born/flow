@@ -1,0 +1,11 @@
+#import "./CommunityTrainDetails.graphql"
+#import "./MythicTrainDetails.graphql"
+
+fragment VariantTrainDetails on VariantTrainDetails {
+  ... on CommunityTrainDetails {
+    ...CommunityTrainDetails
+  }
+  ... on MythicTrainDetails {
+    ...MythicTrainDetails
+  }
+}

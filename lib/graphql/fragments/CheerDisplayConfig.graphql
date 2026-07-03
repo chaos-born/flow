@@ -1,0 +1,13 @@
+fragment CheerDisplayConfig on CheermoteDisplayConfig {
+  backgrounds
+  colors {
+    bits
+    color
+  }
+  order
+  scales
+  types {
+    animation
+    extension
+  }
+}

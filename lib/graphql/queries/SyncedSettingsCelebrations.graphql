@@ -1,0 +1,8 @@
+query SyncedSettingsCelebrations {
+  currentUser {
+    id
+    chatUISettings {
+      isCelebrationsEnabled
+    }
+  }
+}

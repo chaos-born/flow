@@ -1,0 +1,9 @@
+fragment StoryInteractiveUserFragment on User {
+  id
+  profileImageURL(width: 70)
+  displayName
+  login
+  stream {
+    id
+  }
+}

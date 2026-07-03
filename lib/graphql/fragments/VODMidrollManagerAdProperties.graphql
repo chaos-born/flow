@@ -1,0 +1,6 @@
+fragment VODMidrollManagerAdProperties on AdProperties {
+  hasVodAdsEnabled
+  vodArchiveMidrolls
+  vodArchiveMidrollsBreakLength
+  vodArchiveMidrollsFrequency
+}

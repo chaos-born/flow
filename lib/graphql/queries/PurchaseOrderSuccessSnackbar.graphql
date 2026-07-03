@@ -1,0 +1,14 @@
+query PurchaseOrderSuccessSnackbar ($channelID: ID) {
+  currentUser {
+    id
+    bitsBalance
+    bitsOffers {
+      id
+      bits
+    }
+  }
+  channel(id: $channelID) {
+    id
+    name
+  }
+}

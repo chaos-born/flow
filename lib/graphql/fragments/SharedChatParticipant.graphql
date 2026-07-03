@@ -1,0 +1,8 @@
+fragment SharedChatParticipant on SharedChatParticipant {
+  id
+  channel {
+    id
+  }
+  autoAcceptsAt
+  status
+}

@@ -1,0 +1,14 @@
+query Core_Services_Spade_EmoteCard_User ($channelID: ID!) {
+  user(id: $channelID) {
+    id
+    hasPrime
+    self {
+      canPrimeSubscribe
+      subscriptionBenefit {
+        id
+        tier
+        purchasedWithPrime
+      }
+    }
+  }
+}

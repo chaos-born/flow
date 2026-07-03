@@ -1,0 +1,12 @@
+query WhispersSearchUsersQuery ($userQuery: String!) {
+  searchUsers(userQuery: $userQuery) {
+    edges {
+      node {
+        id
+        login
+        displayName
+        profileImageURL(width: 50)
+      }
+    }
+  }
+}

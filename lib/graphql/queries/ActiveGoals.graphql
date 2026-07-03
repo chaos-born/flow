@@ -1,0 +1,18 @@
+#import "../fragments/ChannelGoalFragment.graphql"
+
+query ActiveGoals ($channelLogin: String!) {
+  channel(name: $channelLogin) {
+    id
+    goals(states: [ACTIVE]) {
+      edges {
+        cursor
+        node {
+          ...ChannelGoalFragment
+        }
+      }
+      pageInfo {
+        hasNextPage
+      }
+    }
+  }
+}

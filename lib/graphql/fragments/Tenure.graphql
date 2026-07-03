@@ -1,0 +1,4 @@
+fragment Tenure on SubscriptionTenure {
+  daysRemaining
+  months
+}

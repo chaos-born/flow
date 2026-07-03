@@ -1,0 +1,7 @@
+mutation MarkCreatorMessageRead ($input: MarkCreatorMessageReadInput!) {
+  markCreatorMessageRead(input: $input) {
+    error {
+      code
+    }
+  }
+}

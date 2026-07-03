@@ -1,0 +1,10 @@
+query Sub_Analytics ($channelID: ID!) {
+  user(id: $channelID) {
+    id
+    self {
+      subscriptionBenefit {
+        id
+      }
+    }
+  }
+}

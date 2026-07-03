@@ -1,0 +1,5 @@
+mutation ConnectAdIdentityMutation ($input: ConnectAdIdentityInput!) {
+  connectAdIdentity(input: $input) {
+    identityURL
+  }
+}

@@ -1,0 +1,6 @@
+fragment HypeTrainEmoteReward on HypeTrainEmoteReward {
+  emote {
+    id
+    token
+  }
+}

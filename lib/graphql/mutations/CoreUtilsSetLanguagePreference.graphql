@@ -1,0 +1,10 @@
+mutation CoreUtilsSetLanguagePreference ($input: SetPreferredLanguageTagInput!) {
+  setPreferredLanguageTag(input: $input) {
+    user {
+      id
+      settings {
+        preferredLanguageTag
+      }
+    }
+  }
+}

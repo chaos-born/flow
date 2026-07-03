@@ -1,0 +1,14 @@
+query BulkAllActiveHypeTrainStatusesQuery ($channelIDs: [ID!]!) {
+  allActiveHypeTrainStatuses(channelIDs: $channelIDs) {
+    id
+    channel {
+      id
+    }
+    level
+    isGoldenKappaTrain
+    isAllTimeHighTrain
+    isTreasureTrain
+    isSharedTrain
+    hypeTrainType
+  }
+}

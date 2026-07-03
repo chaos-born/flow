@@ -1,0 +1,5 @@
+fragment PlatformEventSettingFragment on PlatformEventSetting {
+  platformName
+  settingState
+  isEnabled
+}

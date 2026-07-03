@@ -1,0 +1,13 @@
+#import "../fragments/ExtensionInstallationSelfEdge.graphql"
+
+query ExtensionsForChannel ($channelID: ID!) {
+  user(id: $channelID) {
+    id
+    channel {
+      id
+      selfInstalledExtensions {
+        ...ExtensionInstallationSelfEdge
+      }
+    }
+  }
+}

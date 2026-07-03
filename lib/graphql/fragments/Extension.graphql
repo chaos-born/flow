@@ -1,0 +1,25 @@
+#import "./ExtensionIconURLs.graphql"
+#import "./ExtensionViews.graphql"
+
+fragment Extension on Extension {
+  authorName
+  clientID
+  description
+  hasIdentityLinking
+  iconURLs {
+    ...ExtensionIconURLs
+  }
+  id
+  isBitsEnabled
+  name
+  sku
+  summary
+  vendorCode
+  version
+  views {
+    ...ExtensionViews
+  }
+  state
+  allowlistedConfigURLs: whitelistedConfigURLs
+  allowlistedPanelURLs: whitelistedPanelURLs
+}

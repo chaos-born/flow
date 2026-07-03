@@ -1,0 +1,12 @@
+#import "../fragments/CurrentReactionByContentKeyFragment.graphql"
+
+query currentReactionsByContentKeys ($contentKeys: [ReactionsContentKey!]!) {
+  currentReactionsByContentKeys(contentKeys: $contentKeys) {
+    reactions {
+      ...CurrentReactionByContentKeyFragment
+    }
+    error {
+      code
+    }
+  }
+}

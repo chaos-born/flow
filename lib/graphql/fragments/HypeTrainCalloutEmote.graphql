@@ -1,0 +1,4 @@
+fragment HypeTrainCalloutEmote on Emote {
+  id
+  token
+}

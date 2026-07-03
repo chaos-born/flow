@@ -1,0 +1,5 @@
+fragment RecommendedPostplayGame on Game {
+  id
+  displayName
+  name
+}

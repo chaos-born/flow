@@ -1,0 +1,7 @@
+#import "../fragments/ContentClipsManagerClip.graphql"
+
+query ShareClipRenderStatus ($slug: ID!) {
+  clip(slug: $slug) {
+    ...ContentClipsManagerClip
+  }
+}

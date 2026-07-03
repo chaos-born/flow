@@ -1,0 +1,17 @@
+query CollectionTopBar ($collectionID: ID!) {
+  collection(id: $collectionID) {
+    id
+    title
+    items(first: 200) {
+      totalCount
+      edges {
+        node {
+          __typename
+          ... on Video {
+            id
+          }
+        }
+      }
+    }
+  }
+}

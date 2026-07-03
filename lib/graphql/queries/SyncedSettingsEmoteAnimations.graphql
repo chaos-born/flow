@@ -1,0 +1,8 @@
+query SyncedSettingsEmoteAnimations {
+  currentUser {
+    id
+    chatUISettings {
+      isEmoteAnimationsEnabled
+    }
+  }
+}

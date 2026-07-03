@@ -1,0 +1,26 @@
+mutation InitPasskeyRegistration {
+  initPasskeyRegistration {
+    registrationOptions {
+      challenge
+      relyingPartyIdentifier
+      rpName
+      userHandle
+      userName
+      userDisplayName
+      timeout
+      excludeCredentials
+      pubKeyCredParams {
+        alg
+        type
+      }
+      authenticatorSelection {
+        authenticatorAttachment
+        residentKey
+        userVerification
+      }
+    }
+    error {
+      code
+    }
+  }
+}

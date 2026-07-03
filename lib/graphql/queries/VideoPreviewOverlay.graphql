@@ -1,0 +1,10 @@
+query VideoPreviewOverlay ($login: String!) {
+  user(login: $login) {
+    id
+    stream {
+      id
+      previewImageURL(width: 1280, height: 720)
+      restrictionType
+    }
+  }
+}

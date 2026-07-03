@@ -1,0 +1,6 @@
+query OfflineBannerOverlay ($login: String!) {
+  user(login: $login) {
+    id
+    offlineImageURL
+  }
+}

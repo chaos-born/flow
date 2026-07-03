@@ -1,0 +1,17 @@
+fragment SideNavUser on User {
+  id
+  login
+  displayName
+  profileImageURL(width: 70)
+  primaryColorHex
+  broadcastSettings {
+    id
+    title
+  }
+  channel @include(if: $creatorAnniversariesFeature) {
+    id
+    activeStreamEventCelebration {
+      id
+    }
+  }
+}

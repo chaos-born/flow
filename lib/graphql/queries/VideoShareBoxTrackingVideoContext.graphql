@@ -1,0 +1,17 @@
+query VideoShareBox_TrackingVideoContext ($videoID: ID!) {
+  video(id: $videoID) {
+    id
+    broadcastType
+    owner {
+      id
+      login
+      roles {
+        isPartner
+      }
+    }
+    game {
+      id
+      name
+    }
+  }
+}

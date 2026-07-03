@@ -1,0 +1,7 @@
+query VODPreviewOverlay ($vodID: ID) {
+  video(id: $vodID) {
+    id
+    previewThumbnailURL(width: 1280, height: 720)
+    title
+  }
+}

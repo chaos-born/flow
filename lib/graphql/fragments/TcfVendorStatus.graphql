@@ -1,0 +1,14 @@
+fragment TcfVendorStatus on TCFCookieVendor {
+  name
+  consentStatus
+  hasUserSetConsent
+  isVisible
+  cookieVendorType
+  features
+  purposes
+  flexiblePurposes
+  specialFeatures
+  specialPurposes
+  policyURL
+  cookieMaxAgeSeconds
+}

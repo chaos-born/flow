@@ -1,0 +1,11 @@
+query AccountCheckupSecurityStateQuery {
+  currentUser {
+    id
+    email
+    phoneNumber
+    accountHealth {
+      accountSecurityState
+      isVerifiedEmail
+    }
+  }
+}

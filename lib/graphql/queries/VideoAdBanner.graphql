@@ -1,0 +1,7 @@
+#import "../fragments/VideoAdBannerChannel.graphql"
+
+query VideoAdBanner ($input: UserByAttribute!) {
+  userByAttribute(input: $input) {
+    ...VideoAdBannerChannel
+  }
+}

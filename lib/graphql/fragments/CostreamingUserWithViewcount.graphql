@@ -1,0 +1,19 @@
+fragment CostreamingUserWithViewcount on User {
+  id
+  profileImageURL(width: 70)
+  login
+  displayName
+  stream {
+    id
+    viewersCount
+    game {
+      id
+      displayName
+    }
+  }
+  broadcastSettings {
+    id
+    title
+  }
+  profileURL
+}

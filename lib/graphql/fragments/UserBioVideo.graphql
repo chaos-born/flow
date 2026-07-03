@@ -1,0 +1,10 @@
+fragment UserBioVideo on VideoEdge {
+  node {
+    id
+    game {
+      id
+      displayName
+    }
+    status
+  }
+}

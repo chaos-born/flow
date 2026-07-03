@@ -1,0 +1,8 @@
+#import "./NeoCheermote.graphql"
+
+fragment CheermoteGroup on CheermoteGroup {
+  templateURL
+  nodes {
+    ...NeoCheermote
+  }
+}

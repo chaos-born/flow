@@ -1,0 +1,16 @@
+fragment VideoPlayerVODPostplayRecommendationsVideo on Video {
+  id
+  createdAt
+  lengthSeconds
+  title
+  previewThumbnailURL(width: 640, height: 360)
+  game {
+    id
+    name
+  }
+  self {
+    viewingHistory {
+      position
+    }
+  }
+}

@@ -1,0 +1,6 @@
+fragment IabInformation on IABSpecifiedInformation {
+  id
+  name
+  description
+  illustrations
+}

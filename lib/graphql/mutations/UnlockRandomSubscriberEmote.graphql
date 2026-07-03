@@ -1,0 +1,12 @@
+mutation UnlockRandomSubscriberEmote ($input: UnlockRandomSubscriberEmoteInput!) {
+  unlockRandomSubscriberEmote(input: $input) {
+    balance
+    emote {
+      id
+      token
+    }
+    error {
+      code
+    }
+  }
+}

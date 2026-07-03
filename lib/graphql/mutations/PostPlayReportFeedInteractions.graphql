@@ -1,0 +1,13 @@
+mutation PostPlay_ReportFeedInteractions ($input: ReportFeedInteractionsInput!) {
+  reportFeedInteractions(input: $input) {
+    id
+    session {
+      id
+    }
+    interactions {
+      id
+    }
+    isFetchNeeded
+    error
+  }
+}

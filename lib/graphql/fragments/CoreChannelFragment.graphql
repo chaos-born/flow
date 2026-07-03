@@ -1,0 +1,22 @@
+#import "./CoreUserFragment.graphql"
+
+fragment CoreChannelFragment on User {
+  ...CoreUserFragment
+  channel {
+    id
+    self {
+      isAuthorized
+      restrictionType
+    }
+    trailer {
+      video {
+        id
+        self {
+          viewingHistory {
+            updatedAt
+          }
+        }
+      }
+    }
+  }
+}

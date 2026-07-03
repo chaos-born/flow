@@ -1,0 +1,13 @@
+#import "./HypeTrainBadgeReward.graphql"
+#import "./HypeTrainEmoteReward.graphql"
+
+fragment HypeTrainReward on HypeTrainReward {
+  id
+  type
+  ... on HypeTrainEmoteReward {
+    ...HypeTrainEmoteReward
+  }
+  ... on HypeTrainBadgeReward {
+    ...HypeTrainBadgeReward
+  }
+}

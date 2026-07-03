@@ -1,0 +1,7 @@
+fragment CuratedTagFragment on CuratedTag {
+  id
+  displayName
+  iconURL
+  routeTo
+  type
+}

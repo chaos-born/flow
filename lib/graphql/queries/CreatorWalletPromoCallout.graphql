@@ -1,0 +1,11 @@
+query CreatorWalletPromoCallout ($channelID: ID!) {
+  payoutThresholdEarningsResolver(id: $channelID) {
+    previousMonthAccrual {
+      earnedAmount {
+        nanos
+        units
+        currencyCode
+      }
+    }
+  }
+}

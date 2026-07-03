@@ -1,0 +1,13 @@
+query CreatorMessagesAvailable {
+  creatorMessagesAvailable {
+    hasReceived
+    unreadCount
+    isEligibleCreator
+  }
+  currentUser {
+    id
+    login
+    displayName
+    profileImageURL(width: 50)
+  }
+}

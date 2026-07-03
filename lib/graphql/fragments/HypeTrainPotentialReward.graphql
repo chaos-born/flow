@@ -1,0 +1,9 @@
+#import "./HypeTrainReward.graphql"
+
+fragment HypeTrainPotentialReward on HypeTrainPotentialReward {
+  id
+  level
+  value {
+    ...HypeTrainReward
+  }
+}

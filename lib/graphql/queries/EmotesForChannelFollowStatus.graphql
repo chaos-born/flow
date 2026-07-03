@@ -1,0 +1,10 @@
+query EmotesForChannelFollowStatus ($channelID: ID!) {
+  user(id: $channelID) {
+    id
+    self {
+      follower {
+        followedAt
+      }
+    }
+  }
+}

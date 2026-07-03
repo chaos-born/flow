@@ -1,0 +1,10 @@
+fragment MythicTrainDetails on MythicTrainDetails {
+  selectedEmote {
+    id
+    token
+  }
+  emotePool {
+    id
+    token
+  }
+}

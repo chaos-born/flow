@@ -1,0 +1,8 @@
+mutation Whispers_MarkThreadMessageRead ($input: UpdateWhisperThreadInput!) {
+  updateWhisperThread(input: $input) {
+    thread {
+      id
+      unreadMessagesCount
+    }
+  }
+}

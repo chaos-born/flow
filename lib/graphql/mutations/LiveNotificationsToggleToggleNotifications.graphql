@@ -1,0 +1,14 @@
+mutation LiveNotificationsToggle_ToggleNotifications ($input: FollowUserInput!) {
+  followUser(input: $input) {
+    follow {
+      user {
+        id
+        self {
+          follower {
+            disableNotifications
+          }
+        }
+      }
+    }
+  }
+}

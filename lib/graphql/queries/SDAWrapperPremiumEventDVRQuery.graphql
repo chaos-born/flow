@@ -1,0 +1,12 @@
+query SDAWrapperPremiumEventDVRQuery ($channelLogin: String) {
+  user(login: $channelLogin) {
+    id
+    channel {
+      id
+      activePremiumEvent {
+        id
+        isDvrEligible
+      }
+    }
+  }
+}

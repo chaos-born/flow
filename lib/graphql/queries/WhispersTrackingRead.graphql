@@ -1,0 +1,18 @@
+query Whispers_Tracking_Read ($threadID: ID!) {
+  currentUser {
+    id
+    login
+  }
+  whisperThread(id: $threadID) {
+    id
+    participants {
+      id
+      login
+      self {
+        whisperPermissions {
+          receive
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+query Core_Services_Spade_CurrentUser {
+  currentUser {
+    id
+    login
+    hasTurbo
+    hasPrime
+    language
+  }
+}

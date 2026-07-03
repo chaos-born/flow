@@ -1,0 +1,18 @@
+query CelebrationEmotes ($channelID: ID!) {
+  user(id: $channelID) {
+    id
+    subscriptionProducts {
+      id
+      emoteGroups {
+        id
+        emotes {
+          id
+          setID
+          token
+          assetType
+        }
+      }
+      tier
+    }
+  }
+}

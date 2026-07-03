@@ -1,0 +1,14 @@
+#import "./DropinUserFragment.graphql"
+#import "./GuestStarGuestSlotForViewers.graphql"
+
+fragment GuestStarOngoingSession on GuestStarSessionForViewers {
+  id
+  host {
+    ...DropinUserFragment
+    primaryColorHex
+    description
+  }
+  guests {
+    ...GuestStarGuestSlotForViewers
+  }
+}

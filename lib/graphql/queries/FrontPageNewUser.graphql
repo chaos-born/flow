@@ -1,0 +1,15 @@
+query FrontPageNew_User ($limit: Int) {
+  currentUser {
+    id
+    createdAt
+    followedGames(first: $limit) {
+      nodes {
+        id
+      }
+    }
+    roles {
+      isPartner
+      isStaff
+    }
+  }
+}

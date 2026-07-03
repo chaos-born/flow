@@ -1,0 +1,9 @@
+fragment ContentClassificationLabelPoliciesFields on ContentClassificationLabelPolicyProperties {
+  signPostProperties {
+    signPost
+    contentClassificationLabels
+  }
+  contentGateProperties {
+    contentGate
+  }
+}

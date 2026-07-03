@@ -1,0 +1,9 @@
+query PrimeLinkConnectQuery {
+  currentUser {
+    id
+    accountConnections {
+      hasConnectedAmazon
+    }
+    hasPrime
+  }
+}

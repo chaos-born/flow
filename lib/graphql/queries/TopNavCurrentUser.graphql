@@ -1,0 +1,15 @@
+query TopNav_CurrentUser {
+  currentUser {
+    id
+    createdAt
+    hasPresto
+    turboStatus {
+      hasActiveTurbo
+      hasUsedFreeTrial
+      turboPromotion
+    }
+  }
+  requestInfo {
+    countryCode
+  }
+}

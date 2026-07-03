@@ -1,0 +1,8 @@
+mutation Thread_ArchiveThread ($input: UpdateWhisperThreadInput!) {
+  updateWhisperThread(input: $input) {
+    thread {
+      id
+      isArchived
+    }
+  }
+}

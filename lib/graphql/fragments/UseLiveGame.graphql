@@ -1,0 +1,6 @@
+fragment UseLiveGame on Game {
+  id
+  slug
+  name
+  displayName
+}

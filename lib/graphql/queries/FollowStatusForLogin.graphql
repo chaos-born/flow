@@ -1,0 +1,12 @@
+query FollowStatusForLogin($login: String) {
+    user(login: $login) {
+      id
+      self {
+        follower {
+          node {
+            id
+          }
+        }
+      }
+    }
+  }

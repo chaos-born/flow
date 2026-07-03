@@ -1,0 +1,14 @@
+query UserCanPrimeSubscribe ($channelID: ID!) {
+  user(id: $channelID) {
+    id
+    self {
+      canPrimeSubscribe
+      subscriptionBenefit {
+        id
+      }
+    }
+  }
+  currentUser {
+    id
+  }
+}

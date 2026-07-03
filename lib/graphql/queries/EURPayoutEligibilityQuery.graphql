@@ -1,0 +1,13 @@
+query EURPayoutEligibilityQuery {
+  currentUser {
+    id
+    payout {
+      eurPayoutEligibility {
+        isEligible
+        hasEligibleMethod
+        hasEligibleCurrency
+        isOnboardedCountryEligible
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+query CreatorMessagingCohorts {
+  creatorMessagingCohorts {
+    cohorts {
+      cohortType
+      viewerCount
+      canSend
+      lastSentAt
+      cohortUpdatedAt
+    }
+  }
+}

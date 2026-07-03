@@ -1,0 +1,18 @@
+#import "./PortraitCropMetadata.graphql"
+
+fragment PortraitClipCropping on PortraitClipCropping {
+  portraitClipLayout
+  fullTemplateMetadata {
+    mainFrame {
+      ...PortraitCropMetadata
+    }
+  }
+  stackedTemplateMetadata {
+    topFrame {
+      ...PortraitCropMetadata
+    }
+    bottomFrame {
+      ...PortraitCropMetadata
+    }
+  }
+}

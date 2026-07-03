@@ -1,0 +1,13 @@
+query VideoPlayerPremiumContentOverlayChannel ($channel: String) {
+  user(login: $channel) {
+    id
+    stream {
+      id
+      restriction {
+        id
+        options
+        type
+      }
+    }
+  }
+}

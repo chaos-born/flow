@@ -1,0 +1,5 @@
+fragment HypeTrainParticipationConversionRate on HypeTrainParticipationConversionRate {
+  action
+  source
+  value
+}

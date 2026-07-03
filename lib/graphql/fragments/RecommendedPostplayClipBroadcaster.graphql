@@ -1,0 +1,5 @@
+fragment RecommendedPostplayClipBroadcaster on User {
+  id
+  displayName
+  login
+}

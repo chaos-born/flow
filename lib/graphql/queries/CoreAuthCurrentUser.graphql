@@ -1,0 +1,10 @@
+query CoreAuthCurrentUser {
+  currentUser {
+    displayName
+    id
+    login
+    roles {
+      isStaff
+    }
+  }
+}

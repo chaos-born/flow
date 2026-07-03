@@ -1,0 +1,4 @@
+fragment AdRequestContentLabel on ContentClassificationLabel {
+  id
+  isEnabled
+}

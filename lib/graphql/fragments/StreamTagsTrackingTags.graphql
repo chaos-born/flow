@@ -1,0 +1,7 @@
+#import "./FreeformTagFragment.graphql"
+
+fragment StreamTagsTrackingTags on Stream {
+  freeformTags {
+    ...FreeformTagFragment
+  }
+}

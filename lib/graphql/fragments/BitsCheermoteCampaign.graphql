@@ -1,0 +1,20 @@
+fragment BitsCheermoteCampaign on CheermoteCampaign {
+  id
+  brandImageURL
+  brandName
+  thresholds {
+    id
+    minimumBits
+    matchedPercent
+  }
+  minimumBitsAmount
+  bitsTotal
+  bitsUsed
+  bitsPercentageRemaining
+  userLimit
+  self {
+    id
+    bitsUsed
+    canBeSponsored
+  }
+}

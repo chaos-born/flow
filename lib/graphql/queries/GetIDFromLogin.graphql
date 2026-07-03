@@ -1,0 +1,5 @@
+query GetIDFromLogin ($login: String!) {
+  user(login: $login, lookupType: ACTIVE) {
+    id
+  }
+}

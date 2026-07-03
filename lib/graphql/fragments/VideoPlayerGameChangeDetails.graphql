@@ -1,0 +1,7 @@
+fragment VideoPlayerGameChangeDetails on GameChangeMomentDetails {
+  game {
+    id
+    displayName
+    boxArtURL(width: 40, height: 53)
+  }
+}

@@ -1,0 +1,5 @@
+#import "../fragments/GlobalCheerInfo.graphql"
+
+query BitsConfigContext_Global {
+  ...GlobalCheerInfo
+}

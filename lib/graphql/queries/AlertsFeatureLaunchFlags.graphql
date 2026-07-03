@@ -1,0 +1,7 @@
+#import "../fragments/AlertFeatureFlags.graphql"
+
+query AlertsFeatureLaunchFlags ($channelID: ID!) {
+  alertsFeatureLaunchFlags(channelID: $channelID) {
+    ...AlertFeatureFlags
+  }
+}

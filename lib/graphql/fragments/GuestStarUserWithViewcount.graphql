@@ -1,0 +1,12 @@
+#import "./DropinUserFragment.graphql"
+
+fragment GuestStarUserWithViewcount on User {
+  ...DropinUserFragment
+  primaryColorHex
+  description
+  stream {
+    collaborationViewersCount
+    viewersCount
+    id
+  }
+}

@@ -1,0 +1,10 @@
+fragment VideoAdBannerChannel on User {
+  id
+  login
+  displayName
+  profileImageURL(width: 28)
+  roles {
+    isPartner
+    isAffiliate
+  }
+}

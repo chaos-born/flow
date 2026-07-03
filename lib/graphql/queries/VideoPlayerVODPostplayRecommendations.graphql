@@ -1,0 +1,18 @@
+#import "../fragments/VideoPlayerVODPostplayRecommendationsVideo.graphql"
+
+query VideoPlayerVODPostplayRecommendations ($videoID: ID!) {
+  video(id: $videoID) {
+    id
+    owner {
+      id
+      displayName
+      videos(first: 32, sort: TIME, type: ARCHIVE) {
+        edges {
+          node {
+            ...VideoPlayerVODPostplayRecommendationsVideo
+          }
+        }
+      }
+    }
+  }
+}

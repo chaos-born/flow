@@ -1,0 +1,10 @@
+mutation UpdateSettingsPhoneNumberConfirmationMutation ($input: UpdatePhoneNumberConfirmationInput!) {
+  updatePhoneNumberConfirmation(input: $input) {
+    accessToken
+    error {
+      code
+      externalCode
+      message
+    }
+  }
+}

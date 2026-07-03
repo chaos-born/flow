@@ -1,0 +1,10 @@
+query VideoAdRequestDecline ($context: AdRequestContext!) {
+  adContext(context: $context) {
+    id
+    radToken
+    declineState {
+      reason
+      shouldDecline
+    }
+  }
+}

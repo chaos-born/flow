@@ -1,0 +1,10 @@
+query ClipShareOverlay ($slug: ID!) {
+  clip(slug: $slug) {
+    id
+    broadcaster {
+      id
+      login
+    }
+    title
+  }
+}

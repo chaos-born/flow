@@ -1,0 +1,11 @@
+#import "../fragments/StoryPreviewFragment.graphql"
+
+query StoryPreviewsWithOrder ($input: StoryPreviewsWithOrderInput!) {
+  storyPreviewsWithOrder(input: $input) {
+    previews {
+      ...StoryPreviewFragment
+    }
+    hasNextPage
+    isFresh
+  }
+}

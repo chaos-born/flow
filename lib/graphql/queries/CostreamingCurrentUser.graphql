@@ -1,0 +1,15 @@
+query CostreamingCurrentUser {
+  currentUser {
+    id
+    stream {
+      id
+      costreamDetails {
+        organizer {
+          id
+          login
+          displayName
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+query LiveShoppingProductSummaries ($asins: [String!]!, $liveShoppingSessionID: ID!) {
+  liveShoppingProductSummaries(input: { asins: $asins, liveShoppingSessionID: $liveShoppingSessionID }) {
+    error
+    isAuthenticated
+    productSummaries {
+      altText
+      asin
+      availabilityPrimaryMessage
+      availabilitySupplementaryMessage
+      availabilityType
+      currencyCode
+      dealDiscountPercentage
+      dealType
+      imageList {
+        height
+        url
+        width
+      }
+      isPrime
+      price
+      primeBadgeAltText
+      title
+    }
+    sessionToken
+  }
+}

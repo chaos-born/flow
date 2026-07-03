@@ -1,0 +1,4 @@
+fragment BitsBundleOfferPromotion on BitsPromotion {
+  id
+  type
+}

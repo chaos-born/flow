@@ -1,0 +1,8 @@
+mutation UnlockModifiedEmote ($input: UnlockChosenModifiedSubscriberEmoteInput!) {
+  unlockChosenModifiedSubscriberEmote(input: $input) {
+    balance
+    error {
+      code
+    }
+  }
+}

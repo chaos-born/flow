@@ -1,0 +1,12 @@
+#import "../fragments/ContentDiscoveryPreferenceFragment.graphql"
+
+mutation DiscoveryPreferenceMutation ($input: SetDiscoveryPreferenceInput!) {
+  setDiscoveryPreference(input: $input) {
+    error {
+      code
+    }
+    preference {
+      ...ContentDiscoveryPreferenceFragment
+    }
+  }
+}

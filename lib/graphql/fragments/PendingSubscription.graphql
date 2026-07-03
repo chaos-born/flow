@@ -1,0 +1,6 @@
+fragment PendingSubscription on PendingSubscription {
+  price
+  startsAt
+  tier
+  type
+}

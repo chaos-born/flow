@@ -1,0 +1,14 @@
+#import "../fragments/FollowEdgeNotificationSettingsFragment.graphql"
+
+query UserSelfFollowingNotificationsSettingsState ($channelLogin: String!) {
+  user(login: $channelLogin) {
+    id
+    self {
+      follower {
+        notificationSettings {
+          ...FollowEdgeNotificationSettingsFragment
+        }
+      }
+    }
+  }
+}

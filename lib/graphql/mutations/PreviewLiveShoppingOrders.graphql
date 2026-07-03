@@ -1,0 +1,7 @@
+#import "../fragments/PreviewLiveShoppingOrdersFragment.graphql"
+
+mutation PreviewLiveShoppingOrders ($input: PreviewLiveShoppingOrdersInput!) {
+  previewLiveShoppingOrders(input: $input) {
+    ...PreviewLiveShoppingOrdersFragment
+  }
+}

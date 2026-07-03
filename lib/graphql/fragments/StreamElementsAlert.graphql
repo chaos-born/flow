@@ -1,0 +1,10 @@
+fragment StreamElementsAlert on ActivityFeedStreamElementsAlert {
+  streamElementsType: type
+  data {
+    ... on StreamElementsMerchData {
+      thirdPartyHandle
+      message
+      itemName
+    }
+  }
+}

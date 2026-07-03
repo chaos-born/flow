@@ -1,0 +1,3 @@
+fragment OnsiteNotificationsEdgeExtraFragmentUser on User {
+  id
+}

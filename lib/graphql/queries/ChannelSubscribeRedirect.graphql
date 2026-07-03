@@ -1,0 +1,10 @@
+query ChannelSubscribeRedirect ($channelLogin: String!) {
+  user(login: $channelLogin) {
+    id
+    subscriptionProducts {
+      id
+      name
+      tier
+    }
+  }
+}

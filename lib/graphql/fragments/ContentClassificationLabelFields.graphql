@@ -1,0 +1,4 @@
+fragment ContentClassificationLabelFields on ContentClassificationLabel {
+  id
+  localizedName
+}

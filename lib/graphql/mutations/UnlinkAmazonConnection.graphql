@@ -1,0 +1,5 @@
+mutation UnlinkAmazonConnection ($input: UnlinkAmazonConnectionInput!) {
+  unlinkAmazonConnection(input: $input) {
+    isSuccess
+  }
+}

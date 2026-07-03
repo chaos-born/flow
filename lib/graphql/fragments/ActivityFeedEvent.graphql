@@ -1,0 +1,37 @@
+#import "./ActivityFeedEventDetails.graphql"
+#import "./ActivityFeedTokens.graphql"
+#import "./AlertEvent.graphql"
+
+fragment ActivityFeedEvent on ActivityFeedEvent {
+  id
+  type
+  filterCategoryID
+  timestamp
+  title {
+    ...ActivityFeedTokens
+  }
+  titleTooltip {
+    ...ActivityFeedTokens
+  }
+  content {
+    ...ActivityFeedTokens
+  }
+  contentBody {
+    ...ActivityFeedTokens
+  }
+  user {
+    id
+    displayName
+    login
+  }
+  userContent {
+    ...ActivityFeedTokens
+  }
+  alert {
+    ...AlertEvent
+  }
+  details {
+    ...ActivityFeedEventDetails
+  }
+  customIconURL
+}

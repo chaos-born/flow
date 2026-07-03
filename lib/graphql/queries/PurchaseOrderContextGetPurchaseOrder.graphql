@@ -1,0 +1,10 @@
+#import "../fragments/PurchaseOrder.graphql"
+
+query PurchaseOrderContextGetPurchaseOrder ($purchaseOrderID: ID!) {
+  currentUser {
+    id
+    purchaseOrder(id: $purchaseOrderID) {
+      ...PurchaseOrder
+    }
+  }
+}

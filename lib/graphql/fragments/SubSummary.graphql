@@ -1,0 +1,20 @@
+fragment SubSummary on SubscriptionSummary {
+  id
+  name
+  emotes {
+    id
+    token
+    subscriptionTier
+  }
+  url
+  tier
+  modifiers {
+    code
+    name
+    subscriptionTier
+  }
+  self {
+    subscribedTier
+    cumulativeTenure
+  }
+}

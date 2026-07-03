@@ -1,0 +1,7 @@
+query GetDisplayName ($login: String!) {
+  user(login: $login) {
+    id
+    login
+    displayName
+  }
+}

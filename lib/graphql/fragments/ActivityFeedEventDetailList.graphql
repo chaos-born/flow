@@ -1,0 +1,10 @@
+#import "./ActivityFeedEventDetailItem.graphql"
+
+fragment ActivityFeedEventDetailList on ActivityFeedEventDetailList {
+  items {
+    ...ActivityFeedEventDetailItem
+  }
+  pinnedItems {
+    ...ActivityFeedEventDetailItem
+  }
+}

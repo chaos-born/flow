@@ -1,0 +1,20 @@
+query VideoPlayerSettingsWithClipMetadata ($slug: ID!, $isCommunityMomentsFeatureEnabled: Boolean!) {
+  clip(slug: $slug) {
+    id
+    broadcaster {
+      id
+    }
+    curator {
+      id
+    }
+    communityMoment @include(if: $isCommunityMomentsFeatureEnabled) {
+      id
+    }
+  }
+  currentUser {
+    id
+    roles {
+      isSiteAdmin
+    }
+  }
+}

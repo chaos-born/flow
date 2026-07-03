@@ -1,0 +1,5 @@
+#import "../fragments/FollowButtonUserQueryFragment.graphql"
+
+query FollowButton_User ($login: String!) {
+  ...FollowButtonUserQueryFragment
+}

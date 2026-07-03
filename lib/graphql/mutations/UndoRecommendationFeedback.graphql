@@ -1,0 +1,5 @@
+mutation UndoRecommendationFeedback ($input: UndoRecommendationFeedbackInput!) {
+  undoRecommendationFeedback(input: $input) {
+    feedbackID
+  }
+}

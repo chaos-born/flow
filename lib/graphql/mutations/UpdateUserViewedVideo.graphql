@@ -1,0 +1,7 @@
+mutation updateUserViewedVideo ($input: UpdateUserViewedVideoInput!) {
+  updateUserViewedVideo(input: $input) {
+    video {
+      id
+    }
+  }
+}

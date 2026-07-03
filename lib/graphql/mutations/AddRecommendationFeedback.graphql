@@ -1,0 +1,7 @@
+mutation AddRecommendationFeedback ($input: AddRecommendationFeedbackInput!) {
+  addRecommendationFeedback(input: $input) {
+    recommendationFeedback {
+      id
+    }
+  }
+}

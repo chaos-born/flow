@@ -1,0 +1,21 @@
+query OnsiteNotifications_Summary {
+  currentUser {
+    id
+    notifications {
+      summary {
+        unseenCount
+        lastSeenAt
+        viewerUnreadSummary {
+          unreadCount
+          lastReadAllAt
+        }
+        creatorUnreadSummary {
+          unreadCount
+        }
+        safetyUnreadSummary {
+          unreadCount
+        }
+      }
+    }
+  }
+}

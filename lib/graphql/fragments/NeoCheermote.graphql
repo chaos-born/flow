@@ -1,0 +1,15 @@
+#import "./BitsCheermoteCampaign.graphql"
+
+fragment NeoCheermote on Cheermote {
+  id
+  prefix
+  type
+  campaign {
+    ...BitsCheermoteCampaign
+  }
+  tiers {
+    id
+    bits
+    canShowInBitsCard
+  }
+}

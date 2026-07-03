@@ -1,0 +1,9 @@
+#import "./HypeTrainReward.graphql"
+
+fragment HypeTrainConductorReward on HypeTrainConductorReward {
+  source
+  type
+  rewards {
+    ...HypeTrainReward
+  }
+}

@@ -1,0 +1,5 @@
+fragment VideoAccessTokenClipQuality on ClipVideoQuality {
+  frameRate
+  quality
+  sourceURL
+}

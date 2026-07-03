@@ -1,0 +1,4 @@
+fragment CampaignMetadataFragment on NotificationCampaignMetadata {
+  key
+  value
+}

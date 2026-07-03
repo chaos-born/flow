@@ -1,0 +1,6 @@
+fragment PurchaseOrder on PurchaseOrder {
+  id
+  actionTokenID
+  failureReason
+  state
+}

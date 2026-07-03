@@ -1,0 +1,10 @@
+query TurboAwarenessBanner_ChannelSharedPromotions ($login: String!) {
+  user(login: $login) {
+    id
+    settings {
+      creatorMonetizationSettings {
+        hasSharedPromotions
+      }
+    }
+  }
+}

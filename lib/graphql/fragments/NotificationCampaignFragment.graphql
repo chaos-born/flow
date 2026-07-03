@@ -1,0 +1,11 @@
+#import "./CampaignMetadataFragment.graphql"
+
+fragment NotificationCampaignFragment on NotificationCampaign {
+  id
+  pages
+  metadata {
+    ...CampaignMetadataFragment
+  }
+  displayType
+  priority
+}

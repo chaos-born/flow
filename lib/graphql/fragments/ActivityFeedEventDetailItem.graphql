@@ -1,0 +1,19 @@
+#import "./ActivityFeedTokens.graphql"
+
+fragment ActivityFeedEventDetailItem on ActivityFeedEventDetailItem {
+  title {
+    ...ActivityFeedTokens
+  }
+  content {
+    ...ActivityFeedTokens
+  }
+  value {
+    ... on ActivityFeedEventDetailItemNumber {
+      value
+    }
+    ... on ActivityFeedEventDetailItemPercentage {
+      value
+      total
+    }
+  }
+}

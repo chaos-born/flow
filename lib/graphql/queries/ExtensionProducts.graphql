@@ -1,0 +1,13 @@
+query ExtensionProducts($extensionID: ID!, $version: String) {
+  extension(id: $extensionID, version: $version) {
+    products {
+      sku
+      displayName
+      cost {
+        amount
+        type
+      }
+      isInDevelopment
+    }
+  }
+}

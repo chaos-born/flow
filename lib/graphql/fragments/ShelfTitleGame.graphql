@@ -1,0 +1,6 @@
+fragment ShelfTitleGame on Game {
+  id
+  categorySlug: slug
+  name
+  displayName
+}

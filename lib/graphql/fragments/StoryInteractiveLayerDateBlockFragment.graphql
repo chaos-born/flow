@@ -1,0 +1,15 @@
+#import "./StoryMentionStickerBlockFragment.graphql"
+#import "./StoryStickerBlockFragment.graphql"
+#import "./StoryTextBlockFragment.graphql"
+
+fragment StoryInteractiveLayerDateBlockFragment on StoryInteractiveLayerDataBlock {
+  ... on StoryTextBlock {
+    ...StoryTextBlockFragment
+  }
+  ... on StoryStickerBlock {
+    ...StoryStickerBlockFragment
+  }
+  ... on StoryMentionStickerBlock {
+    ...StoryMentionStickerBlockFragment
+  }
+}

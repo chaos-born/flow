@@ -1,0 +1,7 @@
+mutation UseBits($transactionID: ID!) {
+  endUseBitsInExtension(input: {
+    transactionID: $transactionID
+  }) {
+    balance
+  }
+}

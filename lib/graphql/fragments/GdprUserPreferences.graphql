@@ -1,0 +1,22 @@
+#import "./IabInformation.graphql"
+#import "./PurposeOrFeatureConsent.graphql"
+#import "./TcData.graphql"
+
+fragment GdprUserPreferences on GDPRUserPreferences {
+  tcData {
+    ...TcData
+  }
+  purpose {
+    ...PurposeOrFeatureConsent
+  }
+  specialPurpose {
+    ...IabInformation
+  }
+  features {
+    ...IabInformation
+  }
+  specialFeatureOptIns {
+    ...PurposeOrFeatureConsent
+  }
+  hasUserSetPurposeConsent
+}

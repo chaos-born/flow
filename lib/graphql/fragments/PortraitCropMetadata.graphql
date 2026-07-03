@@ -1,0 +1,10 @@
+fragment PortraitCropMetadata on PortraitCropMetadata {
+  topLeft {
+    xPercentage
+    yPercentage
+  }
+  bottomRight {
+    xPercentage
+    yPercentage
+  }
+}

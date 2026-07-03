@@ -1,0 +1,18 @@
+#import "./VideoPlayerGameChangeDetails.graphql"
+
+fragment VideoPlayerVideoMoment on VideoMoment {
+  id
+  durationMilliseconds
+  positionMilliseconds
+  type
+  description
+  subDescription
+  thumbnailURL
+  details {
+    ...VideoPlayerGameChangeDetails
+  }
+  video {
+    id
+    lengthSeconds
+  }
+}

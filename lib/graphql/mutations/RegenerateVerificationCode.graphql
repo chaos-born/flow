@@ -1,0 +1,7 @@
+mutation RegenerateVerificationCode ($input: RegenerateVerificationCodeInput!) {
+  regenerateVerificationCode(input: $input) {
+    request {
+      status
+    }
+  }
+}

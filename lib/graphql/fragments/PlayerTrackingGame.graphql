@@ -1,0 +1,4 @@
+fragment PlayerTrackingGame on Game {
+  id
+  name
+}

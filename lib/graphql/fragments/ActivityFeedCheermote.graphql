@@ -1,0 +1,5 @@
+fragment ActivityFeedCheermote on ActivityFeedCheermote {
+  prefix
+  bitsAmount
+  tier
+}

@@ -1,0 +1,16 @@
+query FollowPanelOverlay ($channelLogin: String!) {
+  user(login: $channelLogin) {
+    id
+    displayName
+    login
+    self {
+      follower {
+        node {
+          id
+        }
+        disableNotifications
+        followedAt
+      }
+    }
+  }
+}

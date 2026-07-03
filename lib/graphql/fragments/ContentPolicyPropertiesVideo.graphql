@@ -1,0 +1,11 @@
+fragment ContentPolicyPropertiesVideo on Video {
+  id
+  broadcastType
+  contentPolicyProperties {
+    hasBrandedContent
+  }
+  owner {
+    id
+    login
+  }
+}

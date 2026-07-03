@@ -1,0 +1,10 @@
+query PrimeLinking_CurrentUser {
+  currentUser {
+    id
+    login
+    profileImageURL(width: 70)
+    accountConnections {
+      hasConnectedAmazon
+    }
+  }
+}

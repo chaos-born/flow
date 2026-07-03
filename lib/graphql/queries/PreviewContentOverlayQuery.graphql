@@ -1,0 +1,20 @@
+query PreviewContentOverlayQuery ($channel: String) {
+  user(login: $channel) {
+    id
+    stream {
+      id
+      previewImageURL(width: 320, height: 180)
+    }
+    subscriptionProducts {
+      id
+      name
+      tier
+    }
+    self {
+      canPrimeSubscribe
+      subscriptionBenefit {
+        id
+      }
+    }
+  }
+}

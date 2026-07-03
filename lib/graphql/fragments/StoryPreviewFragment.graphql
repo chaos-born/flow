@@ -1,0 +1,23 @@
+#import "./StoryFragment.graphql"
+
+fragment StoryPreviewFragment on StoryPreview {
+  id
+  hasUnseenStory
+  isRecapOnly
+  recap {
+    clipCount
+    latestClipAt
+  }
+  additionalClips {
+    id
+    title
+    game {
+      id
+      displayName
+      slug
+    }
+  }
+  story {
+    ...StoryFragment
+  }
+}

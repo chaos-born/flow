@@ -1,0 +1,13 @@
+#import "./PointsImageFragment.graphql"
+
+fragment PointCustomizationFragment on User {
+  channel {
+    id
+    communityPointsSettings {
+      name
+      image {
+        ...PointsImageFragment
+      }
+    }
+  }
+}

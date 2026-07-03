@@ -1,0 +1,6 @@
+query ExtensionsNotificationBitsBalance {
+  currentUser {
+    id
+    bitsBalance
+  }
+}

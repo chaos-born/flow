@@ -1,0 +1,7 @@
+fragment HypeTrainProgressUpdate on HypeTrainProgress {
+  id
+  goal
+  progression
+  total
+  allTimeHighState
+}

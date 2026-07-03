@@ -1,0 +1,11 @@
+#import "./ActivityFeedEventDetailAssets.graphql"
+#import "./ActivityFeedEventDetailList.graphql"
+
+fragment ActivityFeedEventDetails on ActivityFeedEventDetails {
+  ... on ActivityFeedEventDetailList {
+    ...ActivityFeedEventDetailList
+  }
+  ... on ActivityFeedEventDetailAssets {
+    ...ActivityFeedEventDetailAssets
+  }
+}

@@ -1,0 +1,9 @@
+#import "./TitleToken.graphql"
+
+fragment ShelfTitle on ShelfTitle {
+  key
+  fallbackLocalizedTitle
+  localizedTitleTokens {
+    ...TitleToken
+  }
+}

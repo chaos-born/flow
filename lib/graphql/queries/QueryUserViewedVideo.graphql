@@ -1,0 +1,10 @@
+query queryUserViewedVideo ($videoId: ID!) {
+  video(id: $videoId) {
+    id
+    self {
+      viewingHistory {
+        position
+      }
+    }
+  }
+}

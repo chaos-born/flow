@@ -1,0 +1,13 @@
+query IdentityVerificationRequirementMoneyBanner {
+  currentUser {
+    id
+    roles {
+      isAffiliate
+      isExtensionsDeveloper
+      isPartner
+    }
+  }
+  identityVerificationRequirement {
+    status
+  }
+}

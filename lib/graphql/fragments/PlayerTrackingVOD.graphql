@@ -1,0 +1,8 @@
+fragment PlayerTrackingVOD on Video {
+  id
+  broadcastType
+  game {
+    id
+    name
+  }
+}
