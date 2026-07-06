@@ -456,7 +456,7 @@ class _PastBroadcastCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mutedColor = theme.colorScheme.onSurface.withValues(alpha: 0.58);
-    final ageText = _broadcastAgeText(broadcast);
+    final metadata = _broadcastMetadata(broadcast);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -485,15 +485,6 @@ class _PastBroadcastCard extends StatelessWidget {
                       duration: broadcast.duration,
                     ),
                   ),
-                  if (ageText != null)
-                    Positioned(
-                      right: 6,
-                      bottom: 5,
-                      child: _AgeBadge(
-                        key: ValueKey("past_broadcast_age_${broadcast.id}"),
-                        label: ageText,
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -515,7 +506,7 @@ class _PastBroadcastCard extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  broadcast.category,
+                  metadata,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -545,46 +536,6 @@ class _PastBroadcastCard extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<TwitchPastBroadcast>("broadcast", broadcast));
-  }
-}
-
-class _AgeBadge extends StatelessWidget {
-  const _AgeBadge({
-    required this.label,
-    super.key,
-  });
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(maxWidth: 92),
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.52),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: Colors.white,
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            height: 1,
-          ),
-        ),
-      ),
-    ),
-  );
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties.add(StringProperty("label", label));
   }
 }
 
@@ -724,6 +675,18 @@ String? _broadcastAgeText(TwitchPastBroadcast broadcast) {
   }
 
   return _relativeTimeText(timestamp, DateTime.now());
+}
+
+String _broadcastMetadata(TwitchPastBroadcast broadcast) {
+  final ageText = _broadcastAgeText(broadcast);
+  final category = broadcast.category.trim();
+  if (ageText == null) {
+    return category;
+  }
+  if (category.isEmpty) {
+    return ageText;
+  }
+  return "$ageText | $category";
 }
 
 String _relativeTimeText(DateTime timestamp, DateTime now) {

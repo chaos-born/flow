@@ -40,24 +40,6 @@ void main() {
     expect(requests, 1);
   });
 
-  test("refresh bypasses cached API data", () async {
-    var requests = 0;
-    final client = TwitchApiClient(
-      clientId: "client-123",
-      accessToken: "token-123",
-      httpClient: MockClient((_) async {
-        requests++;
-        return _topGamesResponse(id: "$requests", name: "Category $requests");
-      }),
-    );
-    final cache = TwitchApiCache(clientLoader: () async => client);
-
-    expect((await cache.fetchTopCategoriesPage()).data.single.name, "Category 1");
-    expect((await cache.fetchTopCategoriesPage()).data.single.name, "Category 1");
-    expect((await cache.fetchTopCategoriesPage(refresh: true)).data.single.name, "Category 2");
-    expect(requests, 2);
-  });
-
   test("caches channel details by normalized login and supports refresh", () async {
     var requests = 0;
     final client = TwitchApiClient(

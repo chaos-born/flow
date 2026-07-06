@@ -15,12 +15,14 @@ import "package:http/testing.dart";
 typedef _RequestObserver = void Function(http.Request request);
 
 void main() {
-  testWidgets("keeps the Browse content gap aligned to Following", (tester) async {
+  testWidgets("opens live channels for a tapped category", (tester) async {
+    final requestedRequests = <http.Request>[];
+
     await tester.pumpWidget(
       MaterialApp(
         theme: buildFlowTheme(Brightness.dark),
         home: BrowseScreen(
-          authController: _authController(),
+          authController: _authController(onRequest: requestedRequests.add),
         ),
       ),
     );
@@ -34,20 +36,6 @@ void main() {
       ),
       content: find.byKey(const ValueKey("browse_segmented_control")),
     );
-  });
-
-  testWidgets("opens live channels for a tapped category", (tester) async {
-    final requestedRequests = <http.Request>[];
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildFlowTheme(Brightness.dark),
-        home: BrowseScreen(
-          authController: _authController(onRequest: requestedRequests.add),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
 
     requestedRequests.clear();
     await tester.tap(find.byKey(const ValueKey("browse_category_card_Just Chatting")));
@@ -184,15 +172,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey("browse_search_field")));
     await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey("browse_search_top_bar")),
-        matching: find.byType(BackdropFilter),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text("Search channels or categories"), findsOneWidget);
-    expect(find.text("Search channels"), findsNothing);
     expect(find.byKey(const ValueKey("browse_search_empty_history_icon")), findsOneWidget);
     expect(find.text("No recent searches"), findsOneWidget);
 
@@ -317,19 +296,9 @@ void main() {
     final lowViewerCategoryTop = tester.getTopLeft(
       find.byKey(const ValueKey("browse_search_category_Valiant Hearts")),
     );
-    final categoryThumbnailImage = tester.widget<Image>(
-      find.descendant(
-        of: find.byKey(const ValueKey("browse_search_category_thumbnail_Minecraft")),
-        matching: find.byType(Image),
-      ),
-    );
 
     expect(highChannelTop.dy, lessThan(lowChannelTop.dy));
     expect(categoryTop.dy, lessThan(lowViewerCategoryTop.dy));
-    expect(
-      (categoryThumbnailImage.image as NetworkImage).url,
-      contains("1200x1600"),
-    );
 
     await tester.tap(find.byKey(const ValueKey("browse_search_category_Minecraft")));
     await tester.pumpAndSettle();

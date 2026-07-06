@@ -824,7 +824,6 @@ class OfflineChannelRow extends StatelessWidget {
                   initials: channel.initials,
                   size: 54,
                   avatarColors: channel.avatarColors,
-                  statusColor: const Color(0xFF9EA0B4),
                   imageUrl: channel.avatarImageUrl,
                 ),
                 const SizedBox(width: 14),

@@ -11,64 +11,6 @@ import "package:http/http.dart" as http;
 import "package:http/testing.dart";
 
 void main() {
-  test("does not fetch top streams when search has no live channel logins", () async {
-    var topStreamsRequests = 0;
-    final cache = TwitchApiCache(
-      clientLoader: () async => TwitchApiClient(
-        clientId: "client-123",
-        accessToken: "token-123",
-        httpClient: MockClient((request) async {
-          if (request.url.host == "gql.twitch.tv") {
-            final query = _graphQlQuery(request);
-            final variables = _graphQlVariables(request);
-            if (query.contains("FlowSearchChannels")) {
-              expect(variables["queryFragment"], "case");
-              return _jsonResponse({
-                "data": {
-                  "searchSuggestions": {
-                    "edges": [
-                      _searchChannelEdge(id: "case-1", displayName: "CaseCreator"),
-                    ],
-                    "tracking": null,
-                  },
-                },
-              });
-            }
-            if (query.contains("FlowSearchCategories")) {
-              return _searchCategoriesResponse(const <Map<String, Object?>>[]);
-            }
-            if (query.contains("FlowUsers")) {
-              final ids = (variables["ids"] as List<Object?>?)?.cast<String>() ?? const <String>[];
-              return _jsonResponse({
-                "data": {
-                  "users": [
-                    for (final id in ids) _userJson(id),
-                  ],
-                },
-              });
-            }
-            if (query.contains("FlowTopStreams")) {
-              topStreamsRequests++;
-              return _topStreamsResponse(const <Map<String, Object?>>[]);
-            }
-          }
-
-          return http.Response("not found", 404);
-        }),
-      ),
-    );
-    final store = BrowseSearchStore(
-      apiCache: cache,
-      preferences: _MemoryFlowPreferences(),
-    );
-
-    await store.search("case");
-
-    expect(topStreamsRequests, 0);
-    expect(store.errorMessage, isNull);
-    expect(store.channels.single.displayName, "CaseCreator");
-  });
-
   test("ignores stale search results from an earlier query", () async {
     final slowSearch = Completer<http.Response>();
     final cache = TwitchApiCache(

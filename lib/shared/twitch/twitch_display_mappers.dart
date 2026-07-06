@@ -20,25 +20,54 @@ List<OfflineChannel> offlineChannelsFromConnection(
   final liveUserIds = {
     for (final stream in connection.followedStreams) stream.userId,
   };
+  final offlineFollowedChannels = [
+    for (final channel in connection.followedChannels)
+      if (!liveUserIds.contains(channel.broadcasterId)) channel,
+  ]..sort(_compareFollowedAtDescending);
 
   return [
-    for (final channel in connection.followedChannels)
-      if (!liveUserIds.contains(channel.broadcasterId))
-        OfflineChannel(
-          id: channel.broadcasterId,
-          login: channel.broadcasterLogin,
-          name: displayName(channel.broadcasterName, channel.broadcasterLogin),
-          initials: initialsForName(
-            displayName(channel.broadcasterName, channel.broadcasterLogin),
-          ),
-          lastLive: channel.followedAt == null
-              ? "Offline"
-              : "Followed ${relativeTime(channel.followedAt!)}",
-          category: offlineCategory(connection, channel),
-          avatarColors: colorsForText(channel.broadcasterId),
-          avatarImageUrl: connection.usersById[channel.broadcasterId]?.profileImageUrl,
+    for (final channel in offlineFollowedChannels)
+      OfflineChannel(
+        id: channel.broadcasterId,
+        login: channel.broadcasterLogin,
+        name: displayName(channel.broadcasterName, channel.broadcasterLogin),
+        initials: initialsForName(
+          displayName(channel.broadcasterName, channel.broadcasterLogin),
         ),
+        lastLive: channel.followedAt == null
+            ? "Offline"
+            : "Followed ${relativeTime(channel.followedAt!)}",
+        category: offlineCategory(connection, channel),
+        avatarColors: colorsForText(channel.broadcasterId),
+        avatarImageUrl: connection.usersById[channel.broadcasterId]?.profileImageUrl,
+      ),
   ];
+}
+
+int _compareFollowedAtDescending(
+  TwitchFollowedChannel left,
+  TwitchFollowedChannel right,
+) {
+  final leftFollowedAt = left.followedAt;
+  final rightFollowedAt = right.followedAt;
+  if (leftFollowedAt == null && rightFollowedAt == null) {
+    return displayName(left.broadcasterName, left.broadcasterLogin).toLowerCase().compareTo(
+      displayName(right.broadcasterName, right.broadcasterLogin).toLowerCase(),
+    );
+  }
+  if (leftFollowedAt == null) {
+    return 1;
+  }
+  if (rightFollowedAt == null) {
+    return -1;
+  }
+  final followedAtComparison = rightFollowedAt.compareTo(leftFollowedAt);
+  if (followedAtComparison != 0) {
+    return followedAtComparison;
+  }
+  return displayName(left.broadcasterName, left.broadcasterLogin).toLowerCase().compareTo(
+    displayName(right.broadcasterName, right.broadcasterLogin).toLowerCase(),
+  );
 }
 
 StreamChannel streamChannelFromStream(
@@ -165,6 +194,10 @@ String relativeTime(DateTime date) {
     return weeks == 1 ? "1 week ago" : "$weeks weeks ago";
   }
   final months = (elapsed.inDays / 30).floor();
+  if (months >= 12) {
+    final years = (months / 12).floor();
+    return years == 1 ? "1 year ago" : "$years years ago";
+  }
   return months == 1 ? "1 month ago" : "$months months ago";
 }
 

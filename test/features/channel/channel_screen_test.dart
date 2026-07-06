@@ -39,6 +39,14 @@ void main() {
     expect(find.byKey(const ValueKey("channel_page_jason")), findsOneWidget);
     expect(find.byKey(const ValueKey("channel_back_button")), findsOneWidget);
     expect(find.byKey(const ValueKey("channel_title_Jason")), findsNothing);
+    _expectVisibleHeaderGap(
+      tester,
+      header: find.ancestor(
+        of: find.byKey(const ValueKey("channel_back_button")),
+        matching: find.byType(ClipRect),
+      ),
+      content: find.byKey(const ValueKey("channel_header_card")),
+    );
     expect(find.byType(AvatarRing), findsNothing);
     expect(find.byKey(const ValueKey("channel_live_badge")), findsOneWidget);
     expect(find.text("LIVE"), findsOneWidget);
@@ -52,23 +60,17 @@ void main() {
     expect(find.text("Past broadcasts"), findsOneWidget);
     expect(find.byKey(const ValueKey("past_broadcast_vod-1")), findsOneWidget);
     expect(find.byKey(const ValueKey("past_broadcast_thumbnail_vod-1")), findsOneWidget);
-    expect(find.byKey(const ValueKey("past_broadcast_age_vod-1")), findsOneWidget);
+    expect(find.byKey(const ValueKey("past_broadcast_age_vod-1")), findsNothing);
     expect(find.text("2025 Japan Trip"), findsOneWidget);
     expect(find.text("4:59:59"), findsOneWidget);
     expect(find.text("91.2K views"), findsOneWidget);
-    expect(find.text("2 days ago"), findsOneWidget);
+    expect(find.text("2 days ago | Just Chatting"), findsOneWidget);
     final thumbnailRect = tester.getRect(
       find.byKey(const ValueKey("past_broadcast_thumbnail_vod-1")),
     );
     final durationBadgeFinder = find.byKey(const ValueKey("past_broadcast_duration_vod-1"));
-    final ageBadgeFinder = find.byKey(const ValueKey("past_broadcast_age_vod-1"));
     expect(durationBadgeFinder, findsOneWidget);
-    expect(ageBadgeFinder, findsOneWidget);
     final durationBadgeRect = tester.getRect(durationBadgeFinder);
-    final ageBadgeRect = tester.getRect(find.byKey(const ValueKey("past_broadcast_age_vod-1")));
-    expect(ageBadgeRect.right, closeTo(thumbnailRect.right - 6, 1));
-    expect(ageBadgeRect.right, lessThanOrEqualTo(thumbnailRect.right));
-    expect(ageBadgeRect.bottom, closeTo(thumbnailRect.bottom - 5, 1));
     expect(durationBadgeRect.left, closeTo(thumbnailRect.left + 6, 1));
     expect(durationBadgeRect.bottom, closeTo(thumbnailRect.bottom - 5, 1));
   });
@@ -108,38 +110,6 @@ void main() {
     expect(metadata.data, "$longCategory with 26.3K viewers");
     expect(metadata.maxLines, isNull);
     expect(metadata.overflow, isNot(TextOverflow.ellipsis));
-  });
-
-  testWidgets("uses the standard header gap before channel content", (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildFlowTheme(Brightness.dark),
-        home: ChannelScreen(
-          apiCache: TwitchApiCache(
-            clientLoader: () async => TwitchApiClient(
-              clientId: "client-123",
-              accessToken: "token-123",
-              httpClient: MockClient((_) async => _channelDetailsResponse()),
-            ),
-          ),
-          initialChannel: const ChannelPreview(
-            login: "jason",
-            displayName: "Jason",
-          ),
-        ),
-      ),
-    );
-
-    await tester.pumpAndSettle();
-
-    _expectVisibleHeaderGap(
-      tester,
-      header: find.ancestor(
-        of: find.byKey(const ValueKey("channel_back_button")),
-        matching: find.byType(ClipRect),
-      ),
-      content: find.byKey(const ValueKey("channel_header_card")),
-    );
   });
 
   testWidgets("loads more past broadcasts when scrolling near the bottom", (tester) async {
