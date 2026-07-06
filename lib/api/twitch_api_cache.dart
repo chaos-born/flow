@@ -82,6 +82,25 @@ class TwitchApiCache {
     refresh: refresh,
   );
 
+  Future<TwitchChannelDetails> fetchChannelDetails(
+    String login, {
+    int videosFirst = 30,
+    String? videosCursor,
+    bool refresh = false,
+  }) => _cached(
+    _cacheKey("channelDetails", {
+      "login": login.trim().toLowerCase(),
+      "videosFirst": videosFirst,
+      "videosCursor": videosCursor,
+    }),
+    (client) => client.fetchChannelDetails(
+      login,
+      videosFirst: videosFirst,
+      videosCursor: videosCursor,
+    ),
+    refresh: refresh,
+  );
+
   Future<TwitchPage<TwitchCategory>> searchCategoriesPage(
     String query, {
     int first = 20,

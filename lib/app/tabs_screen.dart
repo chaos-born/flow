@@ -85,7 +85,10 @@ class FlowTabsScreen extends StatefulWidget {
 }
 
 class _FlowTabsScreenState extends State<FlowTabsScreen> {
-  final _navigatorKey = GlobalKey<NavigatorState>();
+  final _followingNavigatorKey = GlobalKey<NavigatorState>();
+  final _browseNavigatorKey = GlobalKey<NavigatorState>();
+  final _settingsNavigatorKey = GlobalKey<NavigatorState>();
+  final _visitedRoutes = <String>{};
   late final FlowPreferences _preferences;
   late final AppSettingsStore _settingsStore;
   late final TwitchAuthController _authController;
@@ -93,6 +96,9 @@ class _FlowTabsScreenState extends State<FlowTabsScreen> {
   late final TabsStore _tabsStore;
   late final BrowseStore _browseStore;
   late final FollowingStore _followingStore;
+  late final _TabNavigatorObserver _followingNavigatorObserver;
+  late final _TabNavigatorObserver _browseNavigatorObserver;
+  late final _TabNavigatorObserver _settingsNavigatorObserver;
 
   @override
   void initState() {
@@ -102,6 +108,7 @@ class _FlowTabsScreenState extends State<FlowTabsScreen> {
     _authController = widget.authController ?? _buildDefaultAuthController();
     _apiCache = TwitchApiCache(clientLoader: () => _loadApiClient(_authController));
     _tabsStore = widget.tabsStore ?? TabsStore(initialRoute: widget.initialRoute);
+    _visitedRoutes.add(_tabsStore.currentRoute);
     _browseStore = widget.browseStore ?? BrowseStore(apiCache: _apiCache);
     _followingStore =
         widget.followingStore ??
@@ -112,14 +119,9 @@ class _FlowTabsScreenState extends State<FlowTabsScreen> {
     if (!_settingsStore.isLoaded) {
       unawaited(_settingsStore.load());
     }
-    if (_tabsStore.currentRoute != FlowRoutes.following) {
-      final initialRoute = _tabsStore.currentRoute;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _openSecondaryRoute(initialRoute);
-        }
-      });
-    }
+    _followingNavigatorObserver = _TabNavigatorObserver(_handleTabNavigatorChanged);
+    _browseNavigatorObserver = _TabNavigatorObserver(_handleTabNavigatorChanged);
+    _settingsNavigatorObserver = _TabNavigatorObserver(_handleTabNavigatorChanged);
   }
 
   TwitchAuthController _buildDefaultAuthController() {
@@ -143,14 +145,10 @@ class _FlowTabsScreenState extends State<FlowTabsScreen> {
       return;
     }
 
-    if (nextRoute == FlowRoutes.following) {
-      _returnToFollowingRoute();
-    } else {
-      _openSecondaryRoute(
-        nextRoute,
-        replaceCurrent: _tabsStore.currentRoute != FlowRoutes.following,
-      );
-    }
+    setState(() {
+      _visitedRoutes.add(nextRoute);
+    });
+    _tabsStore.setCurrentRoute(nextRoute);
   }
 
   @override
@@ -159,26 +157,54 @@ class _FlowTabsScreenState extends State<FlowTabsScreen> {
       extendBody: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: PopScope<void>(
-        canPop: _tabsStore.currentRoute == FlowRoutes.following,
+        canPop: _tabsStore.currentRoute == FlowRoutes.following && !_activeNavigatorCanPop(),
         onPopInvokedWithResult: (didPop, _) {
-          if (didPop || _tabsStore.currentRoute == FlowRoutes.following) {
+          if (didPop) {
             return;
           }
-          _returnToFollowingRoute();
+          unawaited(_handleBackNavigation());
         },
-        child: Navigator(
-          key: _navigatorKey,
-          initialRoute: FlowRoutes.following,
-          observers: widget.navigatorObservers,
-          onGenerateRoute: (settings) => MaterialPageRoute<void>(
-            settings: settings,
-            builder: (_) => FollowingScreen(
-              authController: _authController,
-              followingStore: _followingStore,
-              openTwitchLogin: widget.openTwitchLogin,
-              bottomNavigationBar: const SizedBox.shrink(),
+        child: IndexedStack(
+          index: _routeIndex(_tabsStore.currentRoute),
+          children: [
+            _buildTabNavigator(
+              routeName: FlowRoutes.following,
+              navigatorKey: _followingNavigatorKey,
+              observers: [
+                ...widget.navigatorObservers,
+                _followingNavigatorObserver,
+              ],
+              rootBuilder: (_) => FollowingScreen(
+                authController: _authController,
+                apiCache: _apiCache,
+                followingStore: _followingStore,
+                openTwitchLogin: widget.openTwitchLogin,
+                bottomNavigationBar: const SizedBox.shrink(),
+              ),
             ),
-          ),
+            _buildTabNavigator(
+              routeName: FlowRoutes.browse,
+              navigatorKey: _browseNavigatorKey,
+              observers: [_browseNavigatorObserver],
+              rootBuilder: (_) => BrowseScreen(
+                authController: _authController,
+                apiCache: _apiCache,
+                browseStore: _browseStore,
+                preferences: _preferences,
+                bottomNavigationBar: const SizedBox.shrink(),
+              ),
+            ),
+            _buildTabNavigator(
+              routeName: FlowRoutes.settings,
+              navigatorKey: _settingsNavigatorKey,
+              observers: [_settingsNavigatorObserver],
+              rootBuilder: (_) => SettingsScreen(
+                settingsStore: _settingsStore,
+                openExternalUrl: widget.openExternalUrl,
+                bottomNavigationBar: const SizedBox.shrink(),
+              ),
+            ),
+          ],
         ),
       ),
       bottomNavigationBar: AppBottomNav(
@@ -188,76 +214,93 @@ class _FlowTabsScreenState extends State<FlowTabsScreen> {
     ),
   );
 
-  void _openSecondaryRoute(String routeName, {bool replaceCurrent = false}) {
-    final nextRoute = normalizeFlowRoute(routeName);
-    if (nextRoute == FlowRoutes.following || nextRoute == _tabsStore.activeSecondaryRoute) {
-      return;
+  Widget _buildTabNavigator({
+    required String routeName,
+    required GlobalKey<NavigatorState> navigatorKey,
+    required WidgetBuilder rootBuilder,
+    required List<NavigatorObserver> observers,
+  }) {
+    if (!_visitedRoutes.contains(routeName)) {
+      return const SizedBox.shrink();
     }
 
-    final navigator = _navigatorKey.currentState;
-    if (navigator == null) {
-      return;
-    }
-
-    if (replaceCurrent) {
-      _tabsStore.setActiveSecondaryRoute(null);
-      _popToFollowingRoute(navigator);
-    }
-
-    _tabsStore.setActiveSecondaryRoute(nextRoute);
-    _tabsStore.setCurrentRoute(nextRoute);
-    final route = _secondaryRoute(nextRoute);
-    final routeCompletion = navigator.push<void>(route);
-
-    unawaited(
-      routeCompletion.whenComplete(() {
-        if (!mounted || _tabsStore.activeSecondaryRoute != nextRoute) {
-          return;
-        }
-        _tabsStore.returnToFollowing();
-      }),
+    return Navigator(
+      key: navigatorKey,
+      initialRoute: routeName,
+      observers: observers,
+      onGenerateRoute: (settings) => MaterialPageRoute<void>(
+        settings: settings,
+        builder: rootBuilder,
+      ),
     );
   }
 
-  void _returnToFollowingRoute() {
-    if (_tabsStore.currentRoute == FlowRoutes.following) {
+  Future<void> _handleBackNavigation() async {
+    final activeNavigator = _navigatorKeyFor(_tabsStore.currentRoute).currentState;
+    if (activeNavigator != null && await activeNavigator.maybePop()) {
       return;
     }
-
-    _tabsStore.returnToFollowing();
-    final navigator = _navigatorKey.currentState;
-    if (navigator != null) {
-      _popToFollowingRoute(navigator);
+    if (_tabsStore.currentRoute != FlowRoutes.following) {
+      _selectRoute(FlowRoutes.following);
     }
   }
 
-  void _popToFollowingRoute(NavigatorState navigator) {
-    navigator.popUntil(
-      (route) => route.isFirst || route.settings.name == FlowRoutes.following,
-    );
-  }
+  bool _activeNavigatorCanPop() =>
+      _navigatorKeyFor(_tabsStore.currentRoute).currentState?.canPop() ?? false;
 
-  MaterialPageRoute<void> _secondaryRoute(String routeName) => switch (routeName) {
-    FlowRoutes.browse => MaterialPageRoute<void>(
-      settings: const RouteSettings(name: FlowRoutes.browse),
-      builder: (_) => BrowseScreen(
-        authController: _authController,
-        apiCache: _apiCache,
-        browseStore: _browseStore,
-        preferences: _preferences,
-        bottomNavigationBar: const SizedBox.shrink(),
-      ),
-    ),
-    FlowRoutes.settings => MaterialPageRoute<void>(
-      settings: const RouteSettings(name: FlowRoutes.settings),
-      builder: (_) => SettingsScreen(
-        settingsStore: _settingsStore,
-        openExternalUrl: widget.openExternalUrl,
-        bottomNavigationBar: const SizedBox.shrink(),
-      ),
-    ),
-    _ => throw StateError("Unsupported secondary route: $routeName"),
+  GlobalKey<NavigatorState> _navigatorKeyFor(String routeName) => switch (routeName) {
+    FlowRoutes.browse => _browseNavigatorKey,
+    FlowRoutes.settings => _settingsNavigatorKey,
+    _ => _followingNavigatorKey,
   };
+
+  int _routeIndex(String routeName) => switch (routeName) {
+    FlowRoutes.browse => 1,
+    FlowRoutes.settings => 2,
+    _ => 0,
+  };
+
+  void _handleTabNavigatorChanged() {
+    if (!mounted) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    });
+  }
+}
+
+class _TabNavigatorObserver extends NavigatorObserver {
+  _TabNavigatorObserver(this.onRouteStackChanged);
+
+  final VoidCallback onRouteStackChanged;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    onRouteStackChanged();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    onRouteStackChanged();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didRemove(route, previousRoute);
+    onRouteStackChanged();
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    onRouteStackChanged();
+  }
 }
 
 Future<TwitchApiClient> _loadApiClient(TwitchAuthController authController) async {

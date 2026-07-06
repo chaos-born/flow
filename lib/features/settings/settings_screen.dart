@@ -8,6 +8,7 @@ import "package:flow/app/spacing.dart";
 import "package:flow/shared/external_url_opener.dart";
 import "package:flow/shared/preferences/preferences.dart";
 import "package:flow/shared/widgets/app_bottom_nav.dart";
+import "package:flow/shared/widgets/page_header_layout.dart";
 import "package:flow/shared/widgets/page_header_title.dart";
 import "package:flutter/cupertino.dart";
 import "package:flutter/foundation.dart";
@@ -90,8 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) => Observer(
     builder: (_) {
       final theme = Theme.of(context);
-      const topScrollPadding = 80.0;
-      const bottomScrollPadding = 114.0;
+      const bottomScrollPadding = PageHeaderLayout.bottomNavigationScrollPadding;
 
       return Scaffold(
         extendBody: true,
@@ -103,14 +103,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Stack(
             children: [
               ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  topScrollPadding,
-                  AppSpacing.lg,
-                  0,
-                ).copyWith(bottom: bottomScrollPadding),
+                padding: PageHeaderLayout.scrollPadding(
+                  top: PageHeaderLayout.settingsContentTopPadding,
+                  bottom: bottomScrollPadding,
+                ),
                 children: [
                   _SettingsGroup(
+                    key: const ValueKey("settings_theme_group"),
                     children: [
                       _ThemeModeRow(
                         currentThemeMode: _settingsStore.themeMode,
@@ -180,12 +179,7 @@ class _SettingsTopBar extends StatelessWidget {
               ),
             ),
           ),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.xl,
-          ),
+          padding: PageHeaderLayout.settingsTopBarPadding,
           child: const PageHeaderTitle(
             key: ValueKey("settings_title"),
             title: "Settings",
@@ -197,7 +191,10 @@ class _SettingsTopBar extends StatelessWidget {
 }
 
 class _SettingsGroup extends StatelessWidget {
-  const _SettingsGroup({required this.children});
+  const _SettingsGroup({
+    required this.children,
+    super.key,
+  });
 
   final List<Widget> children;
 

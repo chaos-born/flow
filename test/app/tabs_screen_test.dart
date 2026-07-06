@@ -72,6 +72,50 @@ void main() {
     expect(topLiveStreamsRequests, 1);
     expect(followedLiveRequests, 1);
   });
+
+  testWidgets("keeps Browse category route when switching tabs", (tester) async {
+    var categoryStreamsRequests = 0;
+    final store = _MemoryTwitchStore()
+      ..accessToken = "token-123"
+      ..webSessionToken = "gql-token-123";
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.light),
+        home: FlowTabsScreen(
+          authController: _authController(
+            secureStore: store,
+            onRequest: (request) {
+              if (_isGraphQlOperation(request, "FlowGameStreams")) {
+                categoryStreamsRequests++;
+              }
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("bottom_nav_item_Browse")));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey("browse_category_card_Just Chatting")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("category_streams_page_Just Chatting")), findsOneWidget);
+    final categoryStreamsRequestsAfterOpen = categoryStreamsRequests;
+    expect(categoryStreamsRequestsAfterOpen, greaterThan(0));
+
+    await tester.tap(find.byKey(const ValueKey("bottom_nav_item_Following")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("category_streams_page_Just Chatting")), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey("bottom_nav_item_Browse")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("category_streams_page_Just Chatting")), findsOneWidget);
+    expect(categoryStreamsRequests, categoryStreamsRequestsAfterOpen);
+  });
 }
 
 TwitchAuthController _authController({

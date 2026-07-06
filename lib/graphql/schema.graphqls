@@ -463,11 +463,15 @@ interface VendorConsent {
 }
 
 interface VideoEdge_Node {
+  createdAt: Time
   game: Game
   id: ID
+  lengthSeconds: Int
   previewThumbnailURL(height: Int, width: Int): String
+  publishedAt: Time
   status: String
   title: String
+  viewCount: Int
 }
 
 interface VideoQuality {
@@ -4264,7 +4268,7 @@ type User implements Curator & OnsiteNotificationContent & ShelfContentEdge_Node
   followedGames(first: Int): [FollowedGame]
   followedLiveUsers(after: Cursor, first: Int): FlowUserConnection
   follows(after: Cursor, first: Int, order: SortOrder): FlowUserConnection
-  followers: [Follower]
+  followers: Follower
   hasPresto: Boolean
   hasPrime: Boolean
   hasTurbo: Boolean
@@ -4311,7 +4315,12 @@ type User implements Curator & OnsiteNotificationContent & ShelfContentEdge_Node
   subscriptionProducts: [SubscriptionProduct]
   turboStatus: [TurboStatu]
   version: Int
-  videos(first: Int, sort: User_Videos_Sort_Enum, type: User_Videos_Type_Enum): [Video]
+  videos(
+    after: Cursor
+    first: Int
+    sort: User_Videos_Sort_Enum
+    type: User_Videos_Type_Enum
+  ): VideoConnection
   whisperSettings: WhisperSetting
   whisperThreads(after: Cursor, first: Int): [WhisperThread]
 }
@@ -4423,7 +4432,13 @@ type VideoComment implements OnsiteNotificationContent {
   id: ID
 }
 
+type VideoConnection {
+  edges: [VideoEdge]
+  pageInfo: PageInfo
+}
+
 type VideoEdge {
+  cursor: Cursor
   node: VideoEdge_Node
 }
 

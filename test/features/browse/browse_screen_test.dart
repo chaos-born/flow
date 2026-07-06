@@ -6,6 +6,7 @@ import "package:flow/app/theme.dart";
 import "package:flow/features/browse/browse_screen.dart";
 import "package:flow/features/following/following_screen.dart";
 import "package:flow/shared/preferences/preferences.dart";
+import "package:flow/shared/widgets/page_header_layout.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
 import "package:http/http.dart" as http;
@@ -14,6 +15,27 @@ import "package:http/testing.dart";
 typedef _RequestObserver = void Function(http.Request request);
 
 void main() {
+  testWidgets("keeps the Browse content gap aligned to Following", (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.dark),
+        home: BrowseScreen(
+          authController: _authController(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    _expectVisibleHeaderGap(
+      tester,
+      header: find.ancestor(
+        of: find.byKey(const ValueKey("browse_title")),
+        matching: find.byType(ClipRect),
+      ),
+      content: find.byKey(const ValueKey("browse_segmented_control")),
+    );
+  });
+
   testWidgets("opens live channels for a tapped category", (tester) async {
     final requestedRequests = <http.Request>[];
 
@@ -36,6 +58,14 @@ void main() {
     expect(find.byType(StreamCard), findsWidgets);
     expect(find.text("AussieAntics"), findsOneWidget);
     expect(find.text("NovaSkye"), findsOneWidget);
+    _expectVisibleHeaderGap(
+      tester,
+      header: find.ancestor(
+        of: find.byKey(const ValueKey("category_streams_title_Just Chatting")),
+        matching: find.byType(ClipRect),
+      ),
+      content: find.byKey(const ValueKey("browse_live_channels")),
+    );
     expect(
       requestedRequests.any(
         (request) =>
@@ -52,6 +82,16 @@ void main() {
         )
         .length;
 
+    await tester.tap(find.byKey(const ValueKey("stream_channel_identity_AussieAntics")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("channel_page_aussieantics")), findsOneWidget);
+
+    Navigator.of(
+      tester.element(find.byKey(const ValueKey("channel_page_aussieantics"))),
+    ).pop();
+    await tester.pumpAndSettle();
+
     Navigator.of(
       tester.element(find.byKey(const ValueKey("category_streams_page_Just Chatting"))),
     ).pop();
@@ -67,6 +107,64 @@ void main() {
         )
         .length;
     expect(categoryRequestsAfterReopen, categoryRequestsAfterFirstOpen);
+  });
+
+  testWidgets("opens browse live channel identities from the Live Channels section", (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.dark),
+        home: BrowseScreen(
+          authController: _authController(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("browse_segment_live_channels")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("browse_live_channels")), findsOneWidget);
+    expect(find.byKey(const ValueKey("stream_channel_identity_AussieAntics")), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey("stream_channel_identity_AussieAntics")));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey("channel_page_aussieantics")), findsOneWidget);
+  });
+
+  testWidgets("does not paginate when switching between Browse sections", (
+    tester,
+  ) async {
+    final requestedRequests = <http.Request>[];
+    await tester.binding.setSurfaceSize(const Size(390, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.dark),
+        home: BrowseScreen(
+          authController: _authController(onRequest: requestedRequests.add),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    requestedRequests.clear();
+    await tester.tap(find.byKey(const ValueKey("browse_segment_live_channels")));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey("browse_segment_categories")));
+    await tester.pumpAndSettle();
+
+    expect(
+      requestedRequests.where(
+        (request) =>
+            _isGraphQlOperation(request, "FlowTopGames") &&
+            _graphQlVariables(request)["after"] == "cat-page-2",
+      ),
+      isEmpty,
+    );
   });
 
   testWidgets("shows recent search history and clears it", (tester) async {
@@ -127,6 +225,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey("browse_search_history_mine")), findsOneWidget);
+    _expectVisibleHeaderGap(
+      tester,
+      header: find.byKey(const ValueKey("browse_search_top_bar")),
+      content: find.descendant(
+        of: find.byKey(const ValueKey("browse_search_history_header")),
+        matching: find.text("History"),
+      ),
+    );
 
     await tester.tap(find.byKey(const ValueKey("browse_search_clear_history_button")));
     await tester.pumpAndSettle();
@@ -257,6 +363,14 @@ void main() {
       find.byKey(const ValueKey("browse_search_channel_MinecraftCreator")),
       findsOneWidget,
     );
+    _expectVisibleHeaderGap(
+      tester,
+      header: find.byKey(const ValueKey("browse_search_top_bar")),
+      content: find.descendant(
+        of: find.byKey(const ValueKey("browse_search_channels_header")),
+        matching: find.text("Channels"),
+      ),
+    );
     final searchRequestsAfterFirstOpen = requestedRequests
         .where((request) => _isGraphQlOperation(request, "FlowSearchChannels"))
         .length;
@@ -276,6 +390,57 @@ void main() {
         .length;
     expect(searchRequestsAfterReopen, searchRequestsAfterFirstOpen);
   });
+
+  testWidgets("opens search channels with live results limited to the avatar", (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildFlowTheme(Brightness.dark),
+        home: BrowseScreen(
+          authController: _authController(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_field")));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey("browse_search_page_field")),
+      "mine",
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_channel_MinecraftCreator")));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey("channel_page_minecraftcreator")), findsOneWidget);
+
+    Navigator.of(
+      tester.element(find.byKey(const ValueKey("channel_page_minecraftcreator"))),
+    ).pop();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_channel_HighCreator")));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey("channel_page_highcreator")), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey("browse_search_channel_avatar_HighCreator")));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey("channel_page_highcreator")), findsOneWidget);
+  });
+}
+
+void _expectVisibleHeaderGap(
+  WidgetTester tester, {
+  required Finder header,
+  required Finder content,
+}) {
+  final headerBottom = tester.getBottomLeft(header).dy;
+  final contentTop = tester.getTopLeft(content).dy;
+
+  expect(contentTop - headerBottom, closeTo(PageHeaderLayout.headerContentGap, 0.1));
 }
 
 TwitchAuthController _authController({_RequestObserver? onRequest}) {
@@ -381,6 +546,14 @@ MockClient _browseHttpClient({_RequestObserver? onRequest}) => MockClient((reque
           },
         },
       });
+    }
+
+    if (query.contains("FlowChannelDetails")) {
+      final login = variables["login"]!.toString();
+      return _channelDetailsResponse(
+        login: login,
+        displayName: _displayNameForUserId(_userIdForLogin(login)),
+      );
     }
 
     if (query.contains("FlowSearchCategories")) {
@@ -667,6 +840,27 @@ http.Response _jsonResponse(Map<String, Object?> body) => http.Response(
   200,
   headers: {"content-type": "application/json"},
 );
+
+http.Response _channelDetailsResponse({
+  required String login,
+  required String displayName,
+}) => _jsonResponse({
+  "data": {
+    "user": {
+      "id": _userIdForLogin(login),
+      "login": login,
+      "displayName": displayName,
+      "description": "",
+      "profileImageURL": "https://static-cdn.jtvnw.net/$login.png",
+      "followers": {"totalCount": 0},
+      "stream": null,
+      "videos": {
+        "edges": const <Object?>[],
+        "pageInfo": {"hasNextPage": false},
+      },
+    },
+  },
+});
 
 class _MemoryTwitchStore implements TwitchSecureStore {
   String? accessToken;

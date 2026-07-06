@@ -9,10 +9,14 @@ class StreamChannel {
     required this.viewers,
     required this.avatarColors,
     required this.thumbnailColors,
+    this.id = "",
+    this.login = "",
     this.avatarImageUrl,
     this.thumbnailUrl,
   });
 
+  final String id;
+  final String login;
   final String name;
   final String initials;
   final String title;
@@ -31,9 +35,13 @@ class OfflineChannel {
     required this.lastLive,
     required this.category,
     required this.avatarColors,
+    this.id = "",
+    this.login = "",
     this.avatarImageUrl,
   });
 
+  final String id;
+  final String login;
   final String name;
   final String initials;
   final String lastLive;

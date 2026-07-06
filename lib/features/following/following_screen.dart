@@ -2,17 +2,20 @@ import "dart:async";
 import "dart:ui";
 
 import "package:flow/api/twitch_api.dart";
+import "package:flow/api/twitch_api_cache.dart";
 import "package:flow/api/twitch_auth.dart";
 import "package:flow/app/radius.dart";
 import "package:flow/app/routes.dart";
 import "package:flow/app/spacing.dart";
 import "package:flow/app/theme.dart";
+import "package:flow/features/channel/channel_screen.dart";
 import "package:flow/features/following/following_store.dart";
 import "package:flow/features/following/twitch_login_screen.dart";
 import "package:flow/shared/twitch/twitch_display_mappers.dart";
 import "package:flow/shared/twitch/twitch_display_models.dart";
 import "package:flow/shared/widgets/app_bottom_nav.dart";
 import "package:flow/shared/widgets/avatar_ring.dart";
+import "package:flow/shared/widgets/page_header_layout.dart";
 import "package:flow/shared/widgets/page_header_title.dart";
 import "package:flow/shared/widgets/pull_to_refresh.dart";
 import "package:flow/shared/widgets/section_header.dart";
@@ -30,12 +33,14 @@ class FollowingScreen extends StatefulWidget {
   const FollowingScreen({
     super.key,
     this.authController,
+    this.apiCache,
     this.followingStore,
     this.openTwitchLogin,
     this.bottomNavigationBar,
   });
 
   final TwitchAuthController? authController;
+  final TwitchApiCache? apiCache;
   final FollowingStore? followingStore;
   final TwitchLoginOpener? openTwitchLogin;
   final Widget? bottomNavigationBar;
@@ -47,6 +52,7 @@ class FollowingScreen extends StatefulWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<TwitchAuthController?>("authController", authController));
+    properties.add(DiagnosticsProperty<TwitchApiCache?>("apiCache", apiCache));
     properties.add(DiagnosticsProperty<FollowingStore?>("followingStore", followingStore));
     properties.add(ObjectFlagProperty<TwitchLoginOpener?>.has("openTwitchLogin", openTwitchLogin));
     properties.add(DiagnosticsProperty<Widget?>("bottomNavigationBar", bottomNavigationBar));
@@ -55,6 +61,7 @@ class FollowingScreen extends StatefulWidget {
 
 class _FollowingScreenState extends State<FollowingScreen> {
   late final TwitchAuthController _authController;
+  late final TwitchApiCache _apiCache;
   late final FollowingStore _store;
   final ScrollController _scrollController = ScrollController();
 
@@ -65,7 +72,16 @@ class _FollowingScreenState extends State<FollowingScreen> {
         widget.followingStore?.authController ??
         widget.authController ??
         _buildDefaultAuthController();
-    _store = widget.followingStore ?? FollowingStore(authController: _authController);
+    _apiCache =
+        widget.apiCache ??
+        widget.followingStore?.apiCache ??
+        TwitchApiCache(clientLoader: () => _loadFollowingApiClient(_authController));
+    _store =
+        widget.followingStore ??
+        FollowingStore(
+          authController: _authController,
+          apiCache: _apiCache,
+        );
     unawaited(_store.loadSavedConnection());
   }
 
@@ -111,6 +127,44 @@ class _FollowingScreenState extends State<FollowingScreen> {
 
   Future<void> _refreshFollowing() => _store.loadSavedConnection(refresh: true);
 
+  void _openChannel(ChannelPreview channel) {
+    if (channel.login.trim().isEmpty) {
+      return;
+    }
+
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ChannelScreen(
+            apiCache: _apiCache,
+            initialChannel: channel,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openLiveChannel(StreamChannel channel) {
+    _openChannel(
+      ChannelPreview(
+        login: channel.login.isEmpty ? channel.name : channel.login,
+        displayName: channel.name,
+        avatarImageUrl: channel.avatarImageUrl,
+        isLive: true,
+      ),
+    );
+  }
+
+  void _openOfflineChannel(OfflineChannel channel) {
+    _openChannel(
+      ChannelPreview(
+        login: channel.login.isEmpty ? channel.name : channel.login,
+        displayName: channel.name,
+        avatarImageUrl: channel.avatarImageUrl,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -126,8 +180,7 @@ class _FollowingScreenState extends State<FollowingScreen> {
       final profileUser = _store.profileUser;
       final offlineExpanded = _store.offlineExpanded;
       final showLiveEmptyState = _store.showLiveEmptyState;
-      const topScrollPadding = 92.0;
-      const bottomScrollPadding = 114.0;
+      const bottomScrollPadding = PageHeaderLayout.bottomNavigationScrollPadding;
 
       return Scaffold(
         extendBody: true,
@@ -141,19 +194,17 @@ class _FollowingScreenState extends State<FollowingScreen> {
               FlowPullToRefresh(
                 scrollController: _scrollController,
                 onRefresh: _refreshFollowing,
-                indicatorStartTop: topScrollPadding - 28,
+                indicatorStartTop: PageHeaderLayout.largeTitleRefreshIndicatorStartTop,
                 indicatorMaxTravel: 52,
                 child: ListView(
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: ClampingScrollPhysics(),
                   ),
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    topScrollPadding,
-                    AppSpacing.lg,
-                    0,
-                  ).copyWith(bottom: bottomScrollPadding),
+                  padding: PageHeaderLayout.scrollPadding(
+                    top: PageHeaderLayout.largeTitleContentTopPadding,
+                    bottom: bottomScrollPadding,
+                  ),
                   children: [
                     if (_store.isLoadingFollowing) ...[
                       const LinearProgressIndicator(minHeight: 3),
@@ -168,12 +219,17 @@ class _FollowingScreenState extends State<FollowingScreen> {
                         message: "No followed channels are live now.",
                       )
                     else
-                      for (final channel in liveChannels) StreamCard(channel: channel),
+                      for (final channel in liveChannels)
+                        StreamCard(
+                          channel: channel,
+                          onChannelSelected: _openLiveChannel,
+                        ),
                     const SizedBox(height: AppSpacing.sm),
                     _OfflineCard(
                       channels: offlineChannels,
                       expanded: offlineExpanded,
                       onToggle: _store.toggleOfflineExpanded,
+                      onChannelSelected: _openOfflineChannel,
                     ),
                   ],
                 ),
@@ -237,12 +293,7 @@ class _FrostedTopBar extends StatelessWidget {
               ),
             ),
           ),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.lg,
-          ),
+          padding: PageHeaderLayout.largeTitleTopBarPadding,
           child: _TopBarContent(
             onProfilePressed: onProfilePressed,
             profileInitials: profileInitials,
@@ -311,9 +362,14 @@ class _TopBarContent extends StatelessWidget {
 }
 
 class StreamCard extends StatelessWidget {
-  const StreamCard({required this.channel, super.key});
+  const StreamCard({
+    required this.channel,
+    super.key,
+    this.onChannelSelected,
+  });
 
   final StreamChannel channel;
+  final ValueChanged<StreamChannel>? onChannelSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -366,37 +422,44 @@ class StreamCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                AvatarRing(
-                                  initials: channel.initials,
-                                  size: 28,
-                                  avatarColors: channel.avatarColors,
-                                  imageUrl: channel.avatarImageUrl,
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    channel.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      color: primaryColor,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      height: 1.1,
+                            GestureDetector(
+                              key: ValueKey("stream_channel_identity_${channel.name}"),
+                              behavior: HitTestBehavior.opaque,
+                              onTap: onChannelSelected == null
+                                  ? null
+                                  : () => onChannelSelected!(channel),
+                              child: Row(
+                                children: [
+                                  AvatarRing(
+                                    initials: channel.initials,
+                                    size: 28,
+                                    avatarColors: channel.avatarColors,
+                                    imageUrl: channel.avatarImageUrl,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      channel.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleMedium?.copyWith(
+                                        color: primaryColor,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        height: 1.1,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 5),
-                                Icon(
-                                  Icons.verified,
-                                  color: theme.colorScheme.primary.withValues(
-                                    alpha: isDark ? 0.72 : 0.66,
+                                  const SizedBox(width: 5),
+                                  Icon(
+                                    Icons.verified,
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: isDark ? 0.72 : 0.66,
+                                    ),
+                                    size: 14,
                                   ),
-                                  size: 14,
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Text(
@@ -439,6 +502,12 @@ class StreamCard extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<StreamChannel>("channel", channel));
+    properties.add(
+      ObjectFlagProperty<ValueChanged<StreamChannel>?>.has(
+        "onChannelSelected",
+        onChannelSelected,
+      ),
+    );
   }
 }
 
@@ -478,7 +547,10 @@ class _StreamThumbnail extends StatelessWidget {
             key: ValueKey("viewer_badge_position_$channelName"),
             left: 6,
             bottom: 3,
-            child: _ViewerBadge(viewers: viewers),
+            child: _ViewerBadge(
+              key: ValueKey("viewer_badge_$channelName"),
+              viewers: viewers,
+            ),
           ),
         ],
       ),
@@ -497,18 +569,21 @@ class _StreamThumbnail extends StatelessWidget {
 }
 
 class _ViewerBadge extends StatelessWidget {
-  const _ViewerBadge({required this.viewers});
+  const _ViewerBadge({
+    required this.viewers,
+    super.key,
+  });
 
   final String viewers;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
-      color: Colors.black.withValues(alpha: 0.68),
+      color: Colors.black.withValues(alpha: 0.52),
       borderRadius: BorderRadius.circular(AppRadius.pill),
     ),
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -520,8 +595,9 @@ class _ViewerBadge extends StatelessWidget {
             overflow: TextOverflow.clip,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: Colors.white,
+              fontSize: 11,
               fontFeatures: const [FontFeature.tabularFigures()],
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               height: 1,
             ),
           ),
@@ -617,8 +693,8 @@ class _LiveDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     decoration: const BoxDecoration(
       color: AppColors.liveRed,
       shape: BoxShape.circle,
@@ -631,11 +707,13 @@ class _OfflineCard extends StatelessWidget {
     required this.channels,
     required this.expanded,
     required this.onToggle,
+    required this.onChannelSelected,
   });
 
   final List<OfflineChannel> channels;
   final bool expanded;
   final VoidCallback onToggle;
+  final ValueChanged<OfflineChannel> onChannelSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -689,6 +767,7 @@ class _OfflineCard extends StatelessWidget {
                               OfflineChannelRow(
                                 channel: channels[index],
                                 showDivider: index != channels.length - 1,
+                                onTap: () => onChannelSelected(channels[index]),
                               ),
                           ],
                         )
@@ -705,6 +784,12 @@ class _OfflineCard extends StatelessWidget {
     properties.add(IterableProperty<OfflineChannel>("channels", channels));
     properties.add(DiagnosticsProperty<bool>("expanded", expanded));
     properties.add(ObjectFlagProperty<VoidCallback>.has("onToggle", onToggle));
+    properties.add(
+      ObjectFlagProperty<ValueChanged<OfflineChannel>>.has(
+        "onChannelSelected",
+        onChannelSelected,
+      ),
+    );
   }
 }
 
@@ -713,75 +798,82 @@ class OfflineChannelRow extends StatelessWidget {
     required this.channel,
     super.key,
     this.showDivider = true,
+    this.onTap,
   });
 
   final OfflineChannel channel;
   final bool showDivider;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mutedColor = theme.colorScheme.onSurface.withValues(alpha: 0.58);
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-          child: Row(
-            children: [
-              AvatarRing(
-                initials: channel.initials,
-                size: 54,
-                avatarColors: channel.avatarColors,
-                statusColor: const Color(0xFF9EA0B4),
-                imageUrl: channel.avatarImageUrl,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      channel.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      channel.lastLive,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: mutedColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      channel.category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: mutedColor,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+    return GestureDetector(
+      key: ValueKey("offline_channel_row_${channel.name}"),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Row(
+              children: [
+                AvatarRing(
+                  initials: channel.initials,
+                  size: 54,
+                  avatarColors: channel.avatarColors,
+                  statusColor: const Color(0xFF9EA0B4),
+                  imageUrl: channel.avatarImageUrl,
                 ),
-              ),
-            ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        channel.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        channel.lastLive,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: mutedColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        channel.category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: mutedColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        if (showDivider)
-          Divider(
-            height: 1,
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
-          ),
-      ],
+          if (showDivider)
+            Divider(
+              height: 1,
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+            ),
+        ],
+      ),
     );
   }
 
@@ -790,6 +882,7 @@ class OfflineChannelRow extends StatelessWidget {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<OfflineChannel>("channel", channel));
     properties.add(DiagnosticsProperty<bool>("showDivider", showDivider));
+    properties.add(ObjectFlagProperty<VoidCallback?>.has("onTap", onTap));
   }
 }
 
@@ -852,4 +945,25 @@ class _EmptyState extends StatelessWidget {
     super.debugFillProperties(properties);
     properties.add(StringProperty("message", message));
   }
+}
+
+Future<TwitchApiClient> _loadFollowingApiClient(
+  TwitchAuthController authController,
+) async {
+  if (!authController.config.isConfigured) {
+    throw TwitchAuthException(
+      "Set TWITCH_CLIENT_ID with --dart-define-from-file=.env to browse Twitch.",
+    );
+  }
+
+  final accessToken = await authController.secureStore.readAccessToken();
+  if (accessToken == null || accessToken.isEmpty) {
+    throw TwitchAuthException("Connect Twitch from Following to browse live data.");
+  }
+
+  final gqlAccessToken = await authController.secureStore.readWebSessionToken();
+  return authController.apiClientFactory(
+    accessToken,
+    gqlAccessToken: gqlAccessToken,
+  );
 }

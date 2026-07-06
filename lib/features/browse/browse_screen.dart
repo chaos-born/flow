@@ -10,12 +10,14 @@ import "package:flow/app/spacing.dart";
 import "package:flow/features/browse/browse_search_store.dart";
 import "package:flow/features/browse/browse_store.dart";
 import "package:flow/features/browse/category_streams_store.dart";
+import "package:flow/features/channel/channel_screen.dart";
 import "package:flow/features/following/following_screen.dart";
 import "package:flow/shared/preferences/preferences.dart";
 import "package:flow/shared/twitch/twitch_display_mappers.dart";
 import "package:flow/shared/twitch/twitch_display_models.dart";
 import "package:flow/shared/widgets/app_bottom_nav.dart";
 import "package:flow/shared/widgets/avatar_ring.dart";
+import "package:flow/shared/widgets/page_header_layout.dart";
 import "package:flow/shared/widgets/page_header_title.dart";
 import "package:flow/shared/widgets/pull_to_refresh.dart";
 import "package:flutter/cupertino.dart";
@@ -61,6 +63,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
   late final BrowseSearchStore _searchStore;
   late final FlowPreferences _preferences;
   final _categoryStores = <String, CategoryStreamsStore>{};
+  bool _isRestoringScrollOffset = false;
 
   @override
   void initState() {
@@ -126,7 +129,12 @@ class _BrowseScreenState extends State<BrowseScreen> {
       _scrollController.position.minScrollExtent,
       _scrollController.position.maxScrollExtent,
     );
-    _scrollController.jumpTo(clampedOffset);
+    _isRestoringScrollOffset = true;
+    try {
+      _scrollController.jumpTo(clampedOffset);
+    } finally {
+      _isRestoringScrollOffset = false;
+    }
   }
 
   TwitchAuthController _buildDefaultAuthController() {
@@ -145,14 +153,23 @@ class _BrowseScreenState extends State<BrowseScreen> {
   }
 
   void _loadMoreWhenNearBottom() {
+    if (_isRestoringScrollOffset) {
+      return;
+    }
     _persistScrollOffset();
     if (!_scrollController.hasClients || _scrollController.position.extentAfter > 420) {
       return;
     }
 
     if (_store.selectedSection == BrowseSection.categories) {
+      if (!_store.categoriesLoaded || _store.categoriesCursor == null) {
+        return;
+      }
       unawaited(_store.loadCategories());
     } else {
+      if (!_store.liveChannelsLoaded || _store.liveChannelsCursor == null) {
+        return;
+      }
       unawaited(_store.loadLiveChannels());
     }
   }
@@ -175,6 +192,19 @@ class _BrowseScreenState extends State<BrowseScreen> {
             apiCache: _apiCache,
             category: category,
             categoryStreamsStore: store,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openLiveChannel(StreamChannel channel) {
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ChannelScreen(
+            apiCache: _apiCache,
+            initialChannel: _channelPreviewFromStreamChannel(channel),
           ),
         ),
       ),
@@ -246,7 +276,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
                         onCategorySelected: _openCategory,
                       )
                     else
-                      _LiveChannelsList(channels: _store.liveChannels),
+                      _LiveChannelsList(
+                        channels: _store.liveChannels,
+                        onChannelSelected: _openLiveChannel,
+                      ),
                     if (_store.activeLoading && !_store.activeItemsEmpty) ...[
                       const SizedBox(height: AppSpacing.md),
                       const Center(
@@ -372,7 +405,7 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
     builder: (_) {
       final theme = Theme.of(context);
       final query = _searchController.text.trim();
-      const topScrollPadding = 64.0;
+      const topScrollPadding = PageHeaderLayout.searchContentTopPadding;
 
       return Scaffold(
         key: const ValueKey("browse_search_page"),
@@ -395,6 +428,7 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
                         errorMessage: _store.errorMessage,
                         isSearching: _store.isSearching,
                         topPadding: topScrollPadding,
+                        onChannelSelected: _openChannel,
                         onCategorySelected: _openCategory,
                       ),
               ),
@@ -425,6 +459,25 @@ class _BrowseSearchScreenState extends State<BrowseSearchScreen> {
             authController: widget.authController,
             apiCache: widget.apiCache,
             category: category,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openChannel(TwitchSearchChannel channel) {
+    final channelName = displayName(channel.displayName, channel.broadcasterLogin);
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ChannelScreen(
+            apiCache: widget.apiCache,
+            initialChannel: ChannelPreview(
+              login: channel.broadcasterLogin,
+              displayName: channelName,
+              avatarImageUrl: channel.thumbnailUrl,
+              isLive: channel.isLive,
+            ),
           ),
         ),
       ),
@@ -487,31 +540,38 @@ class _SearchPageTopBar extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    IconButton(
-                      tooltip: "Back",
-                      onPressed: Navigator.of(context).pop,
-                      icon: Icon(Icons.adaptive.arrow_back),
+                    SizedBox.square(
+                      dimension: PageHeaderLayout.searchFieldHeight,
+                      child: IconButton(
+                        tooltip: "Back",
+                        onPressed: Navigator.of(context).pop,
+                        icon: Icon(Icons.adaptive.arrow_back),
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
-                      child: TextField(
-                        key: const ValueKey("browse_search_page_field"),
-                        controller: controller,
-                        focusNode: focusNode,
-                        autocorrect: false,
-                        textInputAction: TextInputAction.search,
-                        onChanged: onChanged,
-                        decoration: InputDecoration(
-                          hintText: "Search channels or categories",
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: controller.text.isEmpty
-                              ? null
-                              : IconButton(
-                                  key: const ValueKey("browse_search_clear_button"),
-                                  tooltip: "Clear search",
-                                  onPressed: onClear,
-                                  icon: const Icon(Icons.close),
-                                ),
+                      child: SizedBox(
+                        height: PageHeaderLayout.searchFieldHeight,
+                        child: TextField(
+                          key: const ValueKey("browse_search_page_field"),
+                          controller: controller,
+                          focusNode: focusNode,
+                          autocorrect: false,
+                          textAlignVertical: TextAlignVertical.center,
+                          textInputAction: TextInputAction.search,
+                          onChanged: onChanged,
+                          decoration: InputDecoration(
+                            hintText: "Search channels or categories",
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: controller.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    key: const ValueKey("browse_search_clear_button"),
+                                    tooltip: "Clear search",
+                                    onPressed: onClear,
+                                    icon: const Icon(Icons.close),
+                                  ),
+                          ),
                         ),
                       ),
                     ),
@@ -603,6 +663,11 @@ class _SearchHistoryView extends StatelessWidget {
               TextButton(
                 key: const ValueKey("browse_search_clear_history_button"),
                 onPressed: onClearHistory,
+                style: TextButton.styleFrom(
+                  minimumSize: Size.zero,
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 child: const Text("Clear"),
               ),
             ],
@@ -650,6 +715,7 @@ class _SearchResults extends StatelessWidget {
     required this.errorMessage,
     required this.isSearching,
     required this.topPadding,
+    required this.onChannelSelected,
     required this.onCategorySelected,
   });
 
@@ -658,6 +724,7 @@ class _SearchResults extends StatelessWidget {
   final String? errorMessage;
   final bool isSearching;
   final double topPadding;
+  final ValueChanged<TwitchSearchChannel> onChannelSelected;
   final ValueChanged<BrowseCategory> onCategorySelected;
 
   @override
@@ -682,7 +749,11 @@ class _SearchResults extends StatelessWidget {
           key: ValueKey("browse_search_channels_header"),
           title: "Channels",
         ),
-        for (final channel in channels) _SearchChannelRow(channel: channel),
+        for (final channel in channels)
+          _SearchChannelRow(
+            channel: channel,
+            onChannelSelected: onChannelSelected,
+          ),
       ],
       if (categories.isNotEmpty) ...[
         if (channels.isNotEmpty) const SizedBox(height: AppSpacing.md),
@@ -717,6 +788,12 @@ class _SearchResults extends StatelessWidget {
     properties.add(StringProperty("errorMessage", errorMessage));
     properties.add(DiagnosticsProperty<bool>("isSearching", isSearching));
     properties.add(DoubleProperty("topPadding", topPadding));
+    properties.add(
+      ObjectFlagProperty<ValueChanged<TwitchSearchChannel>>.has(
+        "onChannelSelected",
+        onChannelSelected,
+      ),
+    );
     properties.add(
       ObjectFlagProperty<ValueChanged<BrowseCategory>>.has(
         "onCategorySelected",
@@ -761,9 +838,13 @@ class _SearchSectionHeader extends StatelessWidget {
 }
 
 class _SearchChannelRow extends StatelessWidget {
-  const _SearchChannelRow({required this.channel});
+  const _SearchChannelRow({
+    required this.channel,
+    required this.onChannelSelected,
+  });
 
   final TwitchSearchChannel channel;
+  final ValueChanged<TwitchSearchChannel> onChannelSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -777,12 +858,18 @@ class _SearchChannelRow extends StatelessWidget {
     return ListTile(
       key: ValueKey("browse_search_channel_$channelName"),
       contentPadding: EdgeInsets.zero,
-      leading: AvatarRing(
-        initials: initialsForName(channelName),
-        size: 42,
-        avatarColors: colorsForText(channel.id),
-        imageUrl: channel.thumbnailUrl,
-        statusColor: channel.isLive ? null : mutedColor,
+      onTap: channel.isLive ? null : () => onChannelSelected(channel),
+      leading: GestureDetector(
+        key: ValueKey("browse_search_channel_avatar_$channelName"),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onChannelSelected(channel),
+        child: AvatarRing(
+          initials: initialsForName(channelName),
+          size: 42,
+          avatarColors: colorsForText(channel.id),
+          imageUrl: channel.thumbnailUrl,
+          statusColor: channel.isLive ? null : mutedColor,
+        ),
       ),
       title: Text(
         channelName,
@@ -819,6 +906,12 @@ class _SearchChannelRow extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<TwitchSearchChannel>("channel", channel));
+    properties.add(
+      ObjectFlagProperty<ValueChanged<TwitchSearchChannel>>.has(
+        "onChannelSelected",
+        onChannelSelected,
+      ),
+    );
   }
 }
 
@@ -967,14 +1060,29 @@ class _CategoryStreamsScreenState extends State<_CategoryStreamsScreen> {
     if (!_scrollController.hasClients || _scrollController.position.extentAfter > 420) {
       return;
     }
+    if (!_store.loaded || _store.cursor == null) {
+      return;
+    }
     unawaited(_store.loadStreams());
+  }
+
+  void _openLiveChannel(StreamChannel channel) {
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ChannelScreen(
+            apiCache: widget.apiCache,
+            initialChannel: _channelPreviewFromStreamChannel(channel),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => Observer(
     builder: (_) {
       final theme = Theme.of(context);
-      const topScrollPadding = 84.0;
       final bottomScrollPadding = 24 + MediaQuery.of(context).padding.bottom;
 
       return Scaffold(
@@ -987,19 +1095,17 @@ class _CategoryStreamsScreenState extends State<_CategoryStreamsScreen> {
               FlowPullToRefresh(
                 scrollController: _scrollController,
                 onRefresh: () => _store.loadStreams(reset: true, refresh: true),
-                indicatorStartTop: topScrollPadding - 28,
+                indicatorStartTop: PageHeaderLayout.backButtonRefreshIndicatorStartTop,
                 indicatorMaxTravel: 52,
                 child: ListView(
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: ClampingScrollPhysics(),
                   ),
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    topScrollPadding,
-                    AppSpacing.lg,
-                    0,
-                  ).copyWith(bottom: bottomScrollPadding),
+                  padding: PageHeaderLayout.scrollPadding(
+                    top: PageHeaderLayout.backButtonContentTopPadding,
+                    bottom: bottomScrollPadding,
+                  ),
                   children: [
                     if (_store.isLoading && _store.channels.isEmpty) ...[
                       const LinearProgressIndicator(minHeight: 3),
@@ -1012,7 +1118,10 @@ class _CategoryStreamsScreenState extends State<_CategoryStreamsScreen> {
                         message: "No live channels streaming ${widget.category.name}.",
                       )
                     else
-                      _LiveChannelsList(channels: _store.channels),
+                      _LiveChannelsList(
+                        channels: _store.channels,
+                        onChannelSelected: _openLiveChannel,
+                      ),
                     if (_store.isLoading && _store.channels.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.md),
                       const Center(
@@ -1071,12 +1180,7 @@ class _CategoryStreamsTopBar extends StatelessWidget {
               ),
             ),
           ),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.lg,
-          ),
+          padding: PageHeaderLayout.backButtonTopBarPadding,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1274,9 +1378,13 @@ class _BrowseSectionSelector extends StatelessWidget {
 }
 
 class _LiveChannelsList extends StatelessWidget {
-  const _LiveChannelsList({required this.channels});
+  const _LiveChannelsList({
+    required this.channels,
+    required this.onChannelSelected,
+  });
 
   final List<StreamChannel> channels;
+  final ValueChanged<StreamChannel> onChannelSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1287,7 +1395,11 @@ class _LiveChannelsList extends StatelessWidget {
     return Column(
       key: const ValueKey("browse_live_channels"),
       children: [
-        for (final channel in channels) StreamCard(channel: channel),
+        for (final channel in channels)
+          StreamCard(
+            channel: channel,
+            onChannelSelected: onChannelSelected,
+          ),
       ],
     );
   }
@@ -1296,8 +1408,21 @@ class _LiveChannelsList extends StatelessWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(IterableProperty<StreamChannel>("channels", channels));
+    properties.add(
+      ObjectFlagProperty<ValueChanged<StreamChannel>>.has(
+        "onChannelSelected",
+        onChannelSelected,
+      ),
+    );
   }
 }
+
+ChannelPreview _channelPreviewFromStreamChannel(StreamChannel channel) => ChannelPreview(
+  login: channel.login.isEmpty ? channel.name : channel.login,
+  displayName: channel.name,
+  avatarImageUrl: channel.avatarImageUrl,
+  isLive: true,
+);
 
 class _CategoryGrid extends StatelessWidget {
   const _CategoryGrid({

@@ -1,3 +1,4 @@
+import "package:flow/graphql/FlowChannelDetails.graphql.dart";
 import "package:flow/graphql/FlowCurrentUser.graphql.dart";
 import "package:flow/graphql/FlowFollowedLiveUsers.graphql.dart";
 import "package:flow/graphql/FlowFollowedUsers.graphql.dart";
@@ -119,6 +120,85 @@ class TwitchSearchChannel {
   final bool isLive;
   final String? thumbnailUrl;
   final DateTime? startedAt;
+}
+
+class TwitchChannelDetails {
+  const TwitchChannelDetails({
+    required this.id,
+    required this.login,
+    required this.displayName,
+    required this.description,
+    required this.followers,
+    required this.pastBroadcasts,
+    required this.pastBroadcastsCursor,
+    this.profileImageUrl,
+    this.liveStream,
+  });
+
+  final String id;
+  final String login;
+  final String displayName;
+  final String description;
+  final int followers;
+  final String? profileImageUrl;
+  final TwitchChannelLiveStream? liveStream;
+  final List<TwitchPastBroadcast> pastBroadcasts;
+  final String? pastBroadcastsCursor;
+
+  TwitchChannelDetails withPastBroadcasts({
+    required List<TwitchPastBroadcast> pastBroadcasts,
+    required String? pastBroadcastsCursor,
+  }) => TwitchChannelDetails(
+    id: id,
+    login: login,
+    displayName: displayName,
+    description: description,
+    followers: followers,
+    profileImageUrl: profileImageUrl,
+    liveStream: liveStream,
+    pastBroadcasts: pastBroadcasts,
+    pastBroadcastsCursor: pastBroadcastsCursor,
+  );
+}
+
+class TwitchChannelLiveStream {
+  const TwitchChannelLiveStream({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.viewerCount,
+    this.thumbnailUrl,
+    this.startedAt,
+  });
+
+  final String id;
+  final String title;
+  final String category;
+  final int viewerCount;
+  final String? thumbnailUrl;
+  final DateTime? startedAt;
+}
+
+class TwitchPastBroadcast {
+  const TwitchPastBroadcast({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.duration,
+    required this.viewCount,
+    this.thumbnailUrl,
+    this.publishedAt,
+    this.createdAt,
+  });
+
+  final String id;
+  final String title;
+  final String category;
+  final Duration duration;
+  final int viewCount;
+  final String? thumbnailUrl;
+  final DateTime? publishedAt;
+  final DateTime? createdAt;
 }
 
 class TwitchPage<T> {
@@ -487,6 +567,37 @@ class TwitchApiClient {
     return TwitchPage<TwitchSearchChannel>(data: channels, cursor: null);
   }
 
+  Future<TwitchChannelDetails> fetchChannelDetails(
+    String login, {
+    int videosFirst = 30,
+    String? videosCursor,
+  }) async {
+    final normalizedLogin = _nonEmptyValue(login);
+    if (normalizedLogin == null) {
+      throw TwitchApiException("Channel login is required.");
+    }
+
+    final data = await _query(
+      () => _graphQlClient.query$FlowChannelDetails(
+        Options$Query$FlowChannelDetails(
+          variables: Variables$Query$FlowChannelDetails(
+            login: normalizedLogin,
+            videosFirst: _boundedFirst(videosFirst),
+            videosAfter: _nonEmptyValue(videosCursor),
+          ),
+          fetchPolicy: graphql.FetchPolicy.noCache,
+        ),
+      ),
+      "FlowChannelDetails",
+    );
+    final user = _mapValue(data.toJson()["user"]);
+    if (user == null) {
+      throw TwitchApiException("Twitch returned no channel for $normalizedLogin.");
+    }
+
+    return _channelDetailsFromGraphQlUser(user);
+  }
+
   Future<TwitchPage<TwitchFollowedStream>> _fetchGameStreamsPage({
     required String gameId,
     required int first,
@@ -712,6 +823,77 @@ class TwitchApiClient {
       startedAt: _dateTimeValue(stream?["createdAt"]),
       isLive: isLive,
     );
+  }
+
+  static TwitchChannelDetails _channelDetailsFromGraphQlUser(
+    Map<String, Object?> user,
+  ) {
+    final followers = _mapValue(user["followers"]);
+    final liveStream = _mapValue(user["stream"]);
+    final videosConnection = _mapValue(user["videos"]);
+
+    return TwitchChannelDetails(
+      id: _stringValue(user["id"]),
+      login: _stringValue(user["login"]),
+      displayName: _stringValue(user["displayName"]),
+      description: _stringValue(user["description"]),
+      followers: _intValue(followers?["totalCount"]),
+      profileImageUrl: user["profileImageURL"] as String?,
+      liveStream: liveStream == null ? null : _channelLiveStreamFromGraphQl(liveStream),
+      pastBroadcastsCursor: _connectionCursor(videosConnection),
+      pastBroadcasts: [
+        for (final edge in _edgeList(videosConnection))
+          if (_mapValue(edge["node"]) case final video?) _pastBroadcastFromGraphQlVideo(video),
+      ],
+    );
+  }
+
+  static TwitchChannelLiveStream _channelLiveStreamFromGraphQl(
+    Map<String, Object?> stream,
+  ) {
+    final game = _mapValue(stream["game"]);
+    final broadcaster = _mapValue(stream["broadcaster"]);
+    final broadcastSettings = _mapValue(broadcaster?["broadcastSettings"]);
+    final title = _stringValue(broadcastSettings?["title"]);
+
+    return TwitchChannelLiveStream(
+      id: _stringValue(stream["id"]),
+      title: title.isEmpty ? "Live now" : title,
+      category: _gameName(game, fallback: "Live"),
+      viewerCount: _intValue(stream["viewersCount"]),
+      thumbnailUrl: stream["previewImageURL"] as String?,
+      startedAt: _dateTimeValue(stream["createdAt"]),
+    );
+  }
+
+  static TwitchPastBroadcast _pastBroadcastFromGraphQlVideo(
+    Map<String, Object?> video,
+  ) {
+    final game = _mapValue(video["game"]);
+    final title = _stringValue(video["title"]);
+
+    return TwitchPastBroadcast(
+      id: _stringValue(video["id"]),
+      title: title.isEmpty ? "Past broadcast" : title,
+      category: _gameName(game, fallback: "Broadcast"),
+      duration: Duration(seconds: _intValue(video["lengthSeconds"])),
+      thumbnailUrl: video["previewThumbnailURL"] as String?,
+      publishedAt: _dateTimeValue(video["publishedAt"]),
+      createdAt: _dateTimeValue(video["createdAt"]),
+      viewCount: _intValue(video["viewCount"]),
+    );
+  }
+
+  static String _gameName(
+    Map<String, Object?>? game, {
+    required String fallback,
+  }) {
+    final displayName = _stringValue(game?["displayName"]);
+    if (displayName.isNotEmpty) {
+      return displayName;
+    }
+    final name = _stringValue(game?["name"]);
+    return name.isEmpty ? fallback : name;
   }
 
   static DateTime? _dateTimeValue(Object? value) {

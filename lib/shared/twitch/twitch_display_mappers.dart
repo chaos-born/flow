@@ -25,6 +25,8 @@ List<OfflineChannel> offlineChannelsFromConnection(
     for (final channel in connection.followedChannels)
       if (!liveUserIds.contains(channel.broadcasterId))
         OfflineChannel(
+          id: channel.broadcasterId,
+          login: channel.broadcasterLogin,
           name: displayName(channel.broadcasterName, channel.broadcasterLogin),
           initials: initialsForName(
             displayName(channel.broadcasterName, channel.broadcasterLogin),
@@ -45,6 +47,8 @@ StreamChannel streamChannelFromStream(
 }) {
   final name = displayName(stream.userName, stream.userLogin);
   return StreamChannel(
+    id: stream.userId,
+    login: stream.userLogin,
     name: name,
     initials: initialsForName(name),
     title: stream.title.isEmpty ? "Live now" : stream.title,

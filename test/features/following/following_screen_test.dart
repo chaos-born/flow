@@ -1,8 +1,15 @@
+import "dart:convert";
+
 import "package:flow/api/twitch_api.dart";
+import "package:flow/api/twitch_api_cache.dart";
 import "package:flow/api/twitch_auth.dart";
+import "package:flow/app/theme.dart";
 import "package:flow/features/following/following_screen.dart";
+import "package:flow/shared/widgets/page_header_layout.dart";
 import "package:flutter/material.dart";
 import "package:flutter_test/flutter_test.dart";
+import "package:http/http.dart" as http;
+import "package:http/testing.dart";
 
 void main() {
   testWidgets("renders live streams and expands offline channels from auth data", (
@@ -61,13 +68,110 @@ void main() {
     expect(find.text("OfflineOne"), findsOneWidget);
     expect(find.text("Just Chatting"), findsOneWidget);
   });
+
+  testWidgets("opens channel pages from live identity and offline rows", (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _followingScreen(
+        apiCache: _channelApiCache(),
+        openTwitchLogin: (_, _) async => _connection(
+          followedStreams: const [
+            TwitchFollowedStream(
+              id: "stream-1",
+              userId: "live-1",
+              userLogin: "liveone",
+              userName: "LiveOne",
+              gameName: "Minecraft",
+              title: "Building with chat",
+              viewerCount: 321,
+            ),
+          ],
+          followedChannels: const [
+            TwitchFollowedChannel(
+              broadcasterId: "live-1",
+              broadcasterLogin: "liveone",
+              broadcasterName: "LiveOne",
+            ),
+            TwitchFollowedChannel(
+              broadcasterId: "offline-1",
+              broadcasterLogin: "offlineone",
+              broadcasterName: "OfflineOne",
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey("profile_auth_button")));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("stream_thumbnail_LiveOne")));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey("channel_page_liveone")), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey("stream_channel_identity_LiveOne")));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey("channel_page_liveone")), findsOneWidget);
+
+    Navigator.of(tester.element(find.byKey(const ValueKey("channel_page_liveone")))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey("offline_toggle")));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey("offline_channel_row_OfflineOne")));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey("channel_page_offlineone")), findsOneWidget);
+  });
+
+  testWidgets("keeps the Following header content gap as the app standard", (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _followingScreen(
+        openTwitchLogin: (_, _) async => _connection(
+          followedStreams: const [
+            TwitchFollowedStream(
+              id: "stream-1",
+              userId: "live-1",
+              userLogin: "liveone",
+              userName: "LiveOne",
+              gameName: "Minecraft",
+              title: "Building with chat",
+              viewerCount: 321,
+            ),
+          ],
+          followedChannels: const [
+            TwitchFollowedChannel(
+              broadcasterId: "live-1",
+              broadcasterLogin: "liveone",
+              broadcasterName: "LiveOne",
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey("profile_auth_button")));
+    await tester.pumpAndSettle();
+
+    final headerBottom = tester.getBottomLeft(find.byKey(const ValueKey("frosted_top_bar"))).dy;
+    final firstCardTop = tester
+        .getTopLeft(find.byKey(const ValueKey("stream_card_content_padding_LiveOne")))
+        .dy;
+
+    expect(firstCardTop - headerBottom, closeTo(PageHeaderLayout.headerContentGap, 0.1));
+  });
 }
 
 Widget _followingScreen({
+  TwitchApiCache? apiCache,
   TwitchLoginOpener? openTwitchLogin,
 }) => MaterialApp(
+  theme: buildFlowTheme(Brightness.dark),
   home: FollowingScreen(
     authController: _authController(),
+    apiCache: apiCache,
     openTwitchLogin: openTwitchLogin,
   ),
 );
@@ -96,6 +200,39 @@ TwitchAuthConnection _connection({
   followedStreams: followedStreams,
   followedChannels: followedChannels,
   channelInfoByBroadcasterId: channelInfoByBroadcasterId,
+);
+
+TwitchApiCache _channelApiCache() => TwitchApiCache(
+  clientLoader: () async => TwitchApiClient(
+    clientId: "client-123",
+    accessToken: "token-123",
+    httpClient: MockClient((request) async {
+      final body = jsonDecode(request.body) as Map<String, Object?>;
+      final variables = (body["variables"] as Map<String, Object?>?) ?? const <String, Object?>{};
+      final login = variables["login"]?.toString() ?? "channel";
+      return http.Response(
+        jsonEncode({
+          "data": {
+            "user": {
+              "id": login,
+              "login": login,
+              "displayName": login == "liveone" ? "LiveOne" : "OfflineOne",
+              "description": "",
+              "profileImageURL": "https://static-cdn.jtvnw.net/$login.png",
+              "followers": {"totalCount": 0},
+              "stream": null,
+              "videos": {
+                "edges": const <Object?>[],
+                "pageInfo": {"hasNextPage": false},
+              },
+            },
+          },
+        }),
+        200,
+        headers: {"content-type": "application/json"},
+      );
+    }),
+  ),
 );
 
 class _MemoryTwitchStore implements TwitchSecureStore {
