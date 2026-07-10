@@ -29,9 +29,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Create .env file with Twitch Client ID
-  run: | echo "TWITCH_CLIENT_ID=${{ secrets.TWITCH_CLIENT_ID }}" > .env
-  echo "TWITCH_REDIRECT_URI=https://localhost/" >> .env
+      - name: Create .env file
+        run: echo "TWITCH_CLIENT_ID=${{ secrets.TWITCH_CLIENT_ID }}" > .env && echo "TWITCH_REDIRECT_URI=https://localhost/" >> .env
 
       - name: Run analyzer
         run: flutter analyze
@@ -39,7 +38,7 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Build Android APK (release) with env
+      - name: Build Android APK (release)
         run: flutter build apk --release --dart-define-from-file=.env
 
       - name: Upload Android APK
