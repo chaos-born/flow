@@ -1,4 +1,4 @@
-name: Flutter Mobile CI/CD
+name: Flutter Android CI
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build_and_test:
-    name: Build and Test
-    runs-on: macos-latest # Required for building both Android and iOS
+  build_android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -24,8 +24,8 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
-          flutter-version-file: 'pubspec.yaml' # Automatically uses version from pubspec
+          channel: stable
+          flutter-version-file: pubspec.yaml
 
       - name: Install dependencies
         run: flutter pub get
@@ -36,20 +36,11 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Build Android App Bundle (AAB)
-        run: flutter build appbundle --release
+      - name: Build Android APK (release)
+        run: flutter build apk --release
 
-      - name: Build iOS IPA
-        run: flutter build ipa --release --no-codesign # Replace with actual signing for production
-
-      - name: Upload Android Artifact
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-release-aab
-          path: build/app/outputs/bundle/release/app-release.aab
-
-      - name: Upload iOS Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-release-ipa
-          path: build/ios/iphoneos/Runner.app # Default output, adjust based on your export settings
+          name: android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
